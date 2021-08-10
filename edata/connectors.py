@@ -383,8 +383,8 @@ class EdistribucionConnector(BaseConnector):
                                     self.data['consumptions'] = update_dictlist(self.data['consumptions'], r, 'datetime')
                                     r = self.get_max_power (contract['cups_id'], contract['date_start'] + relativedelta(months=1), p_date_end)
                                     self.data['maximeter'] = update_dictlist(self.data['maximeter'], r, 'datetime')
-                        if supply['date_end'] is None:
-                            self.data['meter'] = self.get_meter_data (supply['cups_id'])
+                        #if supply['date_end'] is None:
+                        #    self.data['meter'] = self.get_meter_data (supply['cups_id'])
                 self.__retryNumber = 0
             except Exception as e:
                 self.data = data_bck
