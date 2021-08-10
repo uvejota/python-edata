@@ -14,7 +14,7 @@ from setuptools import find_packages, setup, Command
 # Package meta-data.
 NAME = 'e-data'
 DESCRIPTION = 'Python library for managing spanish energy data from various web providers'
-URL = 'https://github.com/uvejota/e-data'
+URL = 'https://github.com/uvejota/python-edata'
 EMAIL = 'vmayorg@outlook.es'
 AUTHOR = 'Vicente'
 REQUIRES_PYTHON = '>=3.6.0'
