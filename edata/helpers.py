@@ -132,15 +132,6 @@ class ReportHelper ():
                 datetime.today ().day, 0, 0, 0
             )
             
-            # update today
-            '''
-            a = processor.get_stats (today_starts, today_starts + timedelta (days=1))
-            self.attributes["today_kWh"] = a['total_kWh']
-            self.attributes["today_p1_kWh"] = a['p1_kWh']
-            self.attributes["today_p2_kWh"] = a['p2_kWh']
-            self.attributes["today_p3_kWh"] = a['p3_kWh']
-            '''
-
             # update yesterday
             a = processor.get_stats (today_starts-timedelta(days=1), today_starts)
             self.attributes["yesterday_kWh"] = a['total_kWh']
