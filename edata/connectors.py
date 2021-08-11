@@ -117,7 +117,8 @@ class DatadisConnector (BaseConnector):
                         p_date_end = min (date_to, supply['date_end']) if supply['date_end'] is not None else date_to
                         self.data['contracts'] = self.get_contract_detail (cups, supply['distributorCode'])
                         for contract in self.data['contracts']:
-                            if ((contract['date_start'] <= date_from <= contract['date_end']) or ((contract['date_start'] <= date_to <= contract['date_end']) if contract['date_end'] is not None else True)):
+                            if (contract['date_start'] <= date_from <= (contract['date_end'] if contract['date_end'] is not None else date_from)) or (
+                            contract['date_start'] <= date_to <= (contract['date_end'] if contract['date_end'] is not None else date_to)):
                                 p_date_start = max (p_date_start, contract['date_start'])
                                 p_date_end = min (p_date_end, contract['date_end']) if contract['date_end'] is not None else p_date_end
                                 r = self.get_consumption_data (cups,  supply["distributorCode"],  p_date_start,  p_date_end,  "0", str(supply['pointType']))
@@ -125,7 +126,14 @@ class DatadisConnector (BaseConnector):
                                 r = self.get_max_power (cups, supply["distributorCode"], contract['date_start'] + relativedelta(months=1), p_date_end)
                                 self.data['maximeter'] = update_dictlist(self.data['maximeter'], r, 'datetime')
             except Exception as e:
-                self.data = data_bck
+                if len(self.data['supplies']) == 0:
+                    self.data['supplies'] = data_bck['supplies']
+                elif len(self.data['contracts']) == 0:
+                    self.data['contracts'] = data_bck['contracts']
+                elif len(self.data['consumptions']) == 0:
+                    self.data['consumptions'] = data_bck['consumptions']
+                elif len(self.data['maximeter']) == 0:
+                    self.data['maximeter'] = data_bck['maximeter']
                 raise e
         else:
             _LOGGER.debug ('ignoring update request due to update interval limit')
@@ -164,10 +172,10 @@ class DatadisConnector (BaseConnector):
         for i in r:
             d = {
                 'date_start': datetime.strptime (i['startDate'], '%Y/%m/%d'),
-                'date_end': datetime.strptime (i['endDate'], '%Y/%m/%d') if i['endDate'] != '' else None,
-                'marketer': i['marketer'],
-                'power_p1': i['contractedPowerkW'][0],
-                'power_p2': i['contractedPowerkW'][1]
+                'date_end': datetime.strptime (i['endDate'], '%Y/%m/%d') if 'endDate' in i and i['endDate'] != '' else None,
+                'marketer': i['marketer'] if 'marketer' in i else None,
+                'power_p1': i['contractedPowerkW'][0] if isinstance(i['contractedPowerkW'], list) else None,
+                'power_p2': i['contractedPowerkW'][1] if (len( i['contractedPowerkW']) > 1) else None
             }
             c.append (d)
         return c
@@ -364,7 +372,8 @@ class EdistribucionConnector(BaseConnector):
                         if (datetime.now() - self.__lastLongAttempt) > self.LONG_UPDATE_INTERVAL:
                             self.__lastLongAttempt = datetime.now()
                             for contract in self.data['contracts']:
-                                if ((contract['date_start'] <= date_from <= contract['date_end']) or ((contract['date_start'] <= date_to <= contract['date_end']) if contract['date_end'] is not None else True)):
+                                if (contract['date_start'] <= date_from <= (contract['date_end'] if contract['date_end'] is not None else date_from)) or (
+                                    contract['date_start'] <= date_to <= (contract['date_end'] if contract['date_end'] is not None else date_to)):
                                     p_date_start = max (p_date_start, contract['date_start'])
                                     p_date_end = min (p_date_end, contract['date_end']) if contract['date_end'] is not None else p_date_end
                                     p_start = p_date_start
