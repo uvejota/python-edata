@@ -33,7 +33,7 @@ ATTRIBUTES = {
     "last_month_p1_kWh": 'kWh',
     "last_month_p2_kWh": 'kWh',
     "last_month_p3_kWh": 'kWh',
-    "max_power": 'kW',
+    "max_power_kW": 'kW',
     "max_power_date": None,
     "max_power_mean_kW": 'kW',
     "max_power_90perc_kW": 'kW'
@@ -67,7 +67,7 @@ class ReportHelper ():
         _LOGGER.debug ('ReportHelper: requesting an async update')
         if self.__loop is None:
             self.__loop = asyncio.get_event_loop()
-        self.__loop.run_in_executor(None, self.update, [date_from, date_to])
+        self.__loop.run_in_executor(None, self.update, *[date_from, date_to])
 
     def update (self, date_from=datetime(1970, 1, 1), date_to=datetime.today()):
         _LOGGER.debug ('ReportHelper: requesting an update')
