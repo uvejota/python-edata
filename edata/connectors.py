@@ -145,19 +145,22 @@ class DatadisConnector (BaseConnector):
         r = self.__send_cmd("https://datadis.es/api-private/api/get-supplies", data=data)
         c = []
         for i in r:
-            d = {
-                'cups': i['cups'] if 'cups' in i else None,
-                'date_start': datetime.strptime (i['validDateFrom'], '%Y/%m/%d') if 'validDateFrom' in i else None,
-                'date_end': datetime.strptime (i['validDateTo'], '%Y/%m/%d') if 'validDateTo' in i and i['validDateTo'] != '' else None,
-                'address': i['address'] if 'address' in i else None,
-                'postal_code': i['postalCode'] if 'postalCode' in i else None,
-                'province': i['province'] if 'province' in i else None,
-                'municipality': i['municipality'] if 'municipality' in i else None,
-                'distributor': i['distributor'] if 'distributor' in i else None,
-                'pointType': i['pointType'] if 'pointType' in i else None,
-                'distributorCode': i['distributorCode' if 'distributorCode' in i else None]
-            }
-            c.append (d)
+            if all (k in i for k in ("cups", "validDateFrom", "validDateTo", 'pointType', 'distributorCode')):
+                d = {
+                    'cups': i['cups'],
+                    'date_start': datetime.strptime (i['validDateFrom'], '%Y/%m/%d'),
+                    'date_end': datetime.strptime (i['validDateTo'], '%Y/%m/%d') if i['validDateTo'] != '' else None,
+                    'address': i['address'] if 'address' in i else None,
+                    'postal_code': i['postalCode'] if 'postalCode' in i else None,
+                    'province': i['province'] if 'province' in i else None,
+                    'municipality': i['municipality'] if 'municipality' in i else None,
+                    'distributor': i['distributor'] if 'distributor' in i else None,
+                    'pointType': i['pointType'],
+                    'distributorCode': i['distributorCode']
+                }
+                c.append (d)
+            else:
+                _LOGGER.warning (f'weird data structure while fetching supplies data, got {r}')
         return c
 
     def get_contract_detail (self, cups, distributorCode, authorizedNif=None):
@@ -170,14 +173,17 @@ class DatadisConnector (BaseConnector):
         r = self.__send_cmd("https://datadis.es/api-private/api/get-contract-detail", data=data)
         c = []
         for i in r:
-            d = {
-                'date_start': datetime.strptime (i['startDate'], '%Y/%m/%d') if 'startDate' in i and i['startDate'] != '' else None,
-                'date_end': datetime.strptime (i['endDate'], '%Y/%m/%d') if 'endDate' in i and i['endDate'] != '' else None,
-                'marketer': i['marketer'] if 'marketer' in i else None,
-                'power_p1': i['contractedPowerkW'][0] if isinstance(i['contractedPowerkW'], list) else None,
-                'power_p2': i['contractedPowerkW'][1] if (len( i['contractedPowerkW']) > 1) else None
-            }
-            c.append (d)
+            if all (k in i for k in ("startDate", "endDate", "marketer", "contractedPowerkW")):
+                d = {
+                    'date_start': datetime.strptime (i['startDate'], '%Y/%m/%d') if i['startDate'] != '' else None,
+                    'date_end': datetime.strptime (i['endDate'], '%Y/%m/%d') if i['endDate'] != '' else None,
+                    'marketer': i['marketer'],
+                    'power_p1': i['contractedPowerkW'][0] if isinstance(i['contractedPowerkW'], list) else None,
+                    'power_p2': i['contractedPowerkW'][1] if (len( i['contractedPowerkW']) > 1) else None
+                }
+                c.append (d)
+            else:
+                _LOGGER.warning (f'weird data structure while fetching contracts data, got {r}')
         return c
 
     def get_consumption_data (self, cups, distributorCode, startDate, endDate, measurementType, pointType, authorizedNif=None):
@@ -194,13 +200,16 @@ class DatadisConnector (BaseConnector):
         r = self.__send_cmd("https://datadis.es/api-private/api/get-consumption-data", data=data)
         c = []
         for i in r:
-            hour = str(int(i['time'].split(':')[0]) - 1)
-            d = {
-                'datetime': datetime.strptime (f"{i['date']} {hour.zfill(2)}:00", '%Y/%m/%d %H:%M') if 'date' in i else None,
-                'value_kWh': i['consumptionKWh'] if 'consumptionKWh' in i else None,
-                'real': True if i['obtainMethod'] == 'Real' else False
-            }
-            c.append (d)
+            if all (k in i for k in ("time", "date", "consumptionKWh", "obtainMethod")):
+                hour = str(int(i['time'].split(':')[0]) - 1) 
+                d = {
+                    'datetime': datetime.strptime (f"{i['date']} {hour.zfill(2)}:00", '%Y/%m/%d %H:%M') ,
+                    'value_kWh': i['consumptionKWh'] ,
+                    'real': True if i['obtainMethod'] == 'Real' else False
+                }
+                c.append (d)
+            else:
+                _LOGGER.warning (f'weird data structure while fetching consumption data, got {r}')
         return c
 
     def get_max_power (self, cups, distributorCode, startDate, endDate, authorizedNif=None):
@@ -215,11 +224,14 @@ class DatadisConnector (BaseConnector):
         r = self.__send_cmd("https://datadis.es/api-private/api/get-max-power", data=data)
         c = []
         for i in r:
-            d = {
-                'datetime': datetime.strptime (f"{i['date']} {i['time']}", '%Y/%m/%d %H:%M') if 'date' in i and 'time' in i else None,
-                'value_kW': i['maxPower'] if 'maxPower' in i else None
-            }
-            c.append (d)
+            if all (k in i for k in ("time", "date", "maxPower")):
+                d = {
+                    'datetime': datetime.strptime (f"{i['date']} {i['time']}", '%Y/%m/%d %H:%M') if 'date' in i and 'time' in i else None,
+                    'value_kW': i['maxPower'] if 'maxPower' in i else None
+                }
+                c.append (d)
+            else:
+                _LOGGER.warning (f'weird data structure while fetching maximeter data, got {r}')
         return c
 
 class EdistribucionConnector(BaseConnector):

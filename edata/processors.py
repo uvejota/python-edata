@@ -12,14 +12,7 @@ DAYS_P3 = ['Saturday', 'Sunday']
 
 class ConsumptionProcessor:
     def __init__ (self, lst):
-        self.data = {
-            'total_kWh': None,
-            'days': None,
-            'daily_kWh': None,
-            'p1_kWh': None,
-            'p2_kWh': None,
-            'p3_kWh': None
-        }
+        self.data = {}
         _df = pd.DataFrame(lst)
         if 'datetime' in _df and 'value_kWh' in _df:
             _df['datetime'] = pd.to_datetime(_df['datetime'])
@@ -34,24 +27,19 @@ class ConsumptionProcessor:
         if self.valid_data:
             _df = self.df.copy ()
             _t = _df.loc[(pd.to_datetime(dt_from) <= _df['datetime']) & (_df['datetime'] < pd.to_datetime(dt_to))]
-            data = {
+            self.data = {
                 'total_kWh': _t['value_kWh'].sum(),
                 'days': _t['value_kWh'].count() / 24.0
             }
-            data['daily_kWh'] = data['total_kWh'] / data['days'] if data['days'] > 0 else data['total_kWh']
-            data['p1_kWh'] = _t['value_kWh'].loc[(_t['datetime'].dt.strftime('%H:%M').isin(LIST_P1)) & (~_t['weekday'].isin(DAYS_P3))].sum()
-            data['p2_kWh'] = _t['value_kWh'].loc[(_t['datetime'].dt.strftime('%H:%M').isin(LIST_P2)) & (~_t['weekday'].isin(DAYS_P3))].sum()
-            data['p3_kWh'] = data['total_kWh'] - data['p1_kWh'] - data['p2_kWh']
-        return data
+            self.data['daily_kWh'] = self.data['total_kWh'] / self.data['days'] if self.data['days'] > 0 else self.data['total_kWh']
+            self.data['p1_kWh'] = _t['value_kWh'].loc[(_t['datetime'].dt.strftime('%H:%M').isin(LIST_P1)) & (~_t['weekday'].isin(DAYS_P3))].sum()
+            self.data['p2_kWh'] = _t['value_kWh'].loc[(_t['datetime'].dt.strftime('%H:%M').isin(LIST_P2)) & (~_t['weekday'].isin(DAYS_P3))].sum()
+            self.data['p3_kWh'] = self.data['total_kWh'] - self.data['p1_kWh'] - self.data['p2_kWh']
+        return self.data
 
 class MaximeterProcessor:
     def __init__(self, lst) -> None:
-        self.data = {
-            'peak_kW': None,
-            'peak_date': None,
-            'peak_mean_kWh': None,
-            'peak_tile90_kWh': None
-        }
+        self.data = {}
         _df = pd.DataFrame(lst)
         if 'datetime' in _df and 'value_kW' in _df:
             _df['datetime'] = pd.to_datetime(_df['datetime'])
@@ -67,10 +55,10 @@ class MaximeterProcessor:
             _t = _df.loc[(pd.to_datetime(dt_from) <= _df['datetime']) & (_df['datetime'] < pd.to_datetime(dt_to))]
             _t = _t.reset_index ()
             idx = _t['value_kW'].argmax ()
-            data = {
+            self.data = {
                 'peak_kW': _t['value_kW'][idx],
                 'peak_date': f"{_t['datetime'][idx]}",
                 'peak_mean_kWh': _t['value_kW'].mean (),
                 'peak_tile90_kWh': _t['value_kW'].quantile (0.9)
             }
-        return data
+        return self.data

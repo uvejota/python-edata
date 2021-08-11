@@ -115,8 +115,8 @@ class ReportHelper ():
         try:
             for i in self.data['contracts']:
                 if i['date_end'] is None:
-                    self.attributes['contract_p1_kW'] = i['power_p1']
-                    self.attributes['contract_p2_kW'] = i['power_p2']
+                    self.attributes['contract_p1_kW'] = i['power_p1'] if 'power_p1' in i else None
+                    self.attributes['contract_p2_kW'] = i['power_p2'] if 'power_p2' in i else None
                     break
         except Exception as e:
             _LOGGER.exception (e)
@@ -134,10 +134,10 @@ class ReportHelper ():
             
             # update yesterday
             a = processor.get_stats (today_starts-timedelta(days=1), today_starts)
-            self.attributes["yesterday_kWh"] = a['total_kWh']
-            self.attributes["yesterday_p1_kWh"] = a['p1_kWh']
-            self.attributes["yesterday_p2_kWh"] = a['p2_kWh']
-            self.attributes["yesterday_p3_kWh"] = a['p3_kWh']
+            self.attributes["yesterday_kWh"] = a['total_kWh'] if 'total_kWh' in a else None
+            self.attributes["yesterday_p1_kWh"] = a['p1_kWh'] if 'p1_kWh' in a else None
+            self.attributes["yesterday_p2_kWh"] = a['p2_kWh'] if 'p2_kWh' in a else None
+            self.attributes["yesterday_p3_kWh"] = a['p3_kWh'] if 'p3_kWh' in a else None
 
             cycle_starts = datetime (
                 datetime.today ().year, 
@@ -146,21 +146,21 @@ class ReportHelper ():
 
             # update current cycle
             a = processor.get_stats (cycle_starts, cycle_starts + relativedelta(months=1))
-            self.attributes["month_kWh"] = a['total_kWh']
-            self.attributes["month_days"] = a['days']
-            self.attributes["month_daily_kWh"] = a['daily_kWh']
-            self.attributes["month_p1_kWh"] = a['p1_kWh']
-            self.attributes["month_p2_kWh"] = a['p2_kWh']
-            self.attributes["month_p3_kWh"] = a['p3_kWh']
+            self.attributes["month_kWh"] = a['total_kWh'] if 'total_kWh' in a else None
+            self.attributes["month_days"] = a['days'] if 'days' in a else None
+            self.attributes["month_daily_kWh"] = a['daily_kWh'] if 'daily_kWh' in a else None
+            self.attributes["month_p1_kWh"] = a['p1_kWh'] if 'p1_kWh' in a else None
+            self.attributes["month_p2_kWh"] = a['p2_kWh'] if 'p2_kWh' in a else None
+            self.attributes["month_p3_kWh"] = a['p3_kWh'] if 'p3_kWh' in a else None
 
             # update last cycle
             a = processor.get_stats (cycle_starts - relativedelta (months=1), cycle_starts)
-            self.attributes["last_month_kWh"] = a['total_kWh']
-            self.attributes["last_month_days_kWh"] = a['days']
-            self.attributes["last_month_daily_kWh"] = a['daily_kWh']
-            self.attributes["last_month_p1_kWh"] = a['p1_kWh']
-            self.attributes["last_month_p2_kWh"] = a['p2_kWh']
-            self.attributes["last_month_p3_kWh"] = a['p3_kWh']
+            self.attributes["last_month_kWh"] = a['total_kWh'] if 'total_kWh' in a else None
+            self.attributes["last_month_days_kWh"] = a['days'] if 'days' in a else None
+            self.attributes["last_month_daily_kWh"] = a['daily_kWh'] if 'daily_kWh' in a else None
+            self.attributes["last_month_p1_kWh"] = a['p1_kWh'] if 'p1_kWh' in a else None
+            self.attributes["last_month_p2_kWh"] = a['p2_kWh'] if 'p2_kWh' in a else None
+            self.attributes["last_month_p3_kWh"] = a['p3_kWh'] if 'p3_kWh' in a else None
         except Exception as e:
             _LOGGER.exception (e)
 
@@ -168,10 +168,10 @@ class ReportHelper ():
         try:
             processor = MaximeterProcessor (self.data['maximeter'])
             a = processor.get_stats (datetime.today() - timedelta(days=365), datetime.today())
-            self.attributes['max_power_kW'] = a['peak_kW']
-            self.attributes['max_power_date'] = a['peak_date']
-            self.attributes['max_power_mean_kW'] = a['peak_mean_kWh']
-            self.attributes['max_power_90perc_kW'] = a['peak_tile90_kWh']
+            self.attributes['max_power_kW'] = a['peak_kW'] if 'peak_kW' in a else None
+            self.attributes['max_power_date'] = a['peak_date'] if 'peak_date' in a else None
+            self.attributes['max_power_mean_kW'] = a['peak_mean_kWh'] if 'peak_mean_kWh' in a else None
+            self.attributes['max_power_90perc_kW'] = a['peak_tile90_kWh'] if 'peak_tile90_kWh' in a else None
         except Exception as e:
             _LOGGER.exception (e)
 
