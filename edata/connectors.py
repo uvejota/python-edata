@@ -24,12 +24,11 @@ def update_dictlist (old_lst, new_lst, key):
 
 class ConnectorError(Exception):
 
-    def __init__(self, where, message):
-        self.where = where
+    def __init__(self, message):
         self.message = message
 
     def __str__(self) -> str:
-        return f'at {self.where}: {self.message}'
+        return f'{self.message}'
 
 class BaseConnector (ABC):
 
@@ -62,7 +61,7 @@ class DatadisConnector (BaseConnector):
         }
 
     def __get_token (self):
-        _LOGGER.info ('No token found, fetching a new one...')
+        _LOGGER.info ('DatadisConnector: no token found, fetching a new one...')
         self.__session = requests.Session()
         credentials = {'username': self.__usr, 'password': self.__pwd}
         r = self.__session.post("https://datadis.es/nikola-auth/tokens/login", data=credentials)
@@ -74,9 +73,9 @@ class DatadisConnector (BaseConnector):
             self.__session.headers['Authorization'] = 'Bearer ' + self.__token['encoded']
             _LOGGER.info (f"Token received {self.__token['decoded']}")
         elif (r.status_code == 401):
-            raise ConnectorError ('', 'invalid credentials')
+            raise ConnectorError ('DatadisConnector: invalid credentials')
         else:
-            raise ConnectorError ('', 'unknown error while retrieving token')
+            raise ConnectorError ('DatadisConnector: unknown error while retrieving token')
 
     def __send_cmd (self, url, data={}, refresh_token=False):
         response = None
@@ -93,16 +92,16 @@ class DatadisConnector (BaseConnector):
         r = self.__session.get(url + params)
         # eval response
         if (r.status_code == 200 and r.json()):
-            _LOGGER.info (f"got a valid response for {url + params}: {r.json()}")
+            _LOGGER.info (f"DatadisConnector: got a valid response for {url + params}: {r.json()}")
             response = r.json()
         elif (r.status_code == 401 and not refresh_token):
             response = self.__send_cmd (url, data=data, refresh_token=True)
         else:
-            _LOGGER.error (f"error while requesting {url + params}; status_code: {r.status_code}, response: {r.text}")        
-            raise ConnectorError ('', f'{url + params} returned {r.text} with code {r.status_code}')
+            raise ConnectorError (f'{url + params} returned {r.text} with code {r.status_code}')
         return response
 
     def update (self, cups, date_from=datetime(1970, 1, 1), date_to=datetime.today()):
+        _LOGGER.debug (f"DatadisConnector: updating data for CUPS {cups[-4:]} from {date_from} to {date_to}")
         if (datetime.now() - self.__lastAttempt) > self.UPDATE_INTERVAL:
             self.__lastAttempt = datetime.now()
             data_bck = self.data
@@ -253,7 +252,7 @@ class EdistribucionConnector(BaseConnector):
         else:
             r = self.__session.post(url, data=post, json=json, params=get, headers=_headers, cookies=cookies)
         if r.status_code >= 400:
-            raise ConnectorError ('', 'Received status_code > 400')
+            raise ConnectorError (f'EdistribucionConnector: {url} returned {r.text} with code {r.status_code}')
         return r
     
     def __send_cmd(self, command, post=None, dashboard=None, accept='*/*', content_type=None):
@@ -281,7 +280,7 @@ class EdistribucionConnector(BaseConnector):
             jr = r.json()
             if (jr['actions'][0]['state'] != 'SUCCESS'):
                 _LOGGER.info ('Got an error. Aborting command.')
-                raise ConnectorError ('', f'Error processing command: {command}')
+                raise ConnectorError (f'EdistribucionConnector: error while processing command: {command}')
             return jr['actions'][0]['returnValue']
         
         return r
@@ -293,10 +292,9 @@ class EdistribucionConnector(BaseConnector):
             r = self.__get_url('https://zonaprivada.edistribucion.com/areaprivada/s/login?ec=302&startURL=%2Fareaprivada%2Fs%2F')
             ix = r.text.find('auraConfig')
             if (ix == -1):
-                raise ConnectorError ('', 'auraConfig not found. Cannot continue')
+                raise ConnectorError ('EdistribucionConnector: auraConfig not found. Cannot continue')
             soup = bs(r.text, 'html.parser')
             scripts = soup.find_all('script')
-            _LOGGER.debug('Loading scripts')
             for s in scripts:
                 src = s.get('src')
                 if (not src):
@@ -308,7 +306,7 @@ class EdistribucionConnector(BaseConnector):
                     unq = unquote(src)
                     self.__context = unq[unq.find('{'):unq.rindex('}')+1]
                     self.__appInfo = json.loads(self.__context)
-            _LOGGER.debug('Performing login routine')
+            _LOGGER.debug('EdistribucionConnector: performing login routine')
             data = {
                     'message':'{"actions":[{"id":"91;a","descriptor":"apex://LightningLoginFormController/ACTION$login","callingDescriptor":"markup://c:WP_LoginForm","params":{"username":"'+self.__credentials['user']+'","password":"'+self.__credentials['password']+'","startUrl":"/areaprivada/s/"}}]}',
                     'aura.context':self.__context,
@@ -321,10 +319,10 @@ class EdistribucionConnector(BaseConnector):
                 if ('invalidSession' in r.text):
                     self.__session = requests.Session()
                     self.__get_token()
-                raise ConnectorError ('', 'login failed, credentials might be wrong')
+                raise ConnectorError ('EdistribucionConnector: login failed, credentials might be wrong')
             jr = r.json()
             if ('events' not in jr):
-                raise ConnectorError ('', 'login failed, credentials might be wrong')
+                raise ConnectorError ('EdistribucionConnector: login failed, credentials might be wrong')
             
             _LOGGER.debug('Accessing to frontdoor')
             r = self.__get_url(jr['events'][0]['attributes']['values']['url'])
@@ -332,7 +330,7 @@ class EdistribucionConnector(BaseConnector):
             r = self.__get_url('https://zonaprivada.edistribucion.com/areaprivada/s/')
             ix = r.text.find('auraConfig')
             if (ix == -1):
-                raise ConnectorError ('', 'auraConfig not found. Cannot continue')
+                raise ConnectorError ('EdistribucionConnector: auraConfig not found. Cannot continue')
             ix = r.text.find('{',ix)
             ed = r.text.find(';',ix)
             try:
@@ -340,16 +338,12 @@ class EdistribucionConnector(BaseConnector):
             except Exception:
                 jr = {}
             if ('token' not in jr):
-                raise ConnectorError ('', 'token not found. Cannot continue')
+                raise ConnectorError ('EdistribucionConnector: token not found. Cannot continue')
             self.__token = jr['token']
-            _LOGGER.debug('Token received!')
-            _LOGGER.debug(self.__token)
-            _LOGGER.debug('Retrieving account info')
+            _LOGGER.debug('EdistribucionConnector: token received!')
             r = self.__getLoginInfo()
             self.__identities['account_id'] = r['visibility']['Id']
             self.__identities['name'] = r['Name']
-            _LOGGER.info('Received name: %s (%s)',r['Name'],r['visibility']['Visible_Account__r']['Identity_number__c'])
-            _LOGGER.debug('Account_id: %s', self.__identities['account_id'])
 
     def update (self, cups, date_from=datetime(1970, 1, 1), date_to=datetime.today()):
         if (datetime.now() - self.__lastShortAttempt) > (self.__retryNumber + 1)*self.SHORT_UPDATE_INTERVAL:
@@ -391,7 +385,7 @@ class EdistribucionConnector(BaseConnector):
                 self.__retryNumber = min(self.__retryLimit, self.__retryNumber + 1)
                 raise e
         else:
-            _LOGGER.debug ('ignoring update request due to update interval limit')
+            _LOGGER.debug ('EdistribucionConnector: ignoring update request due to update interval limit')
 
     def get_supplies (self):
         supplies = []

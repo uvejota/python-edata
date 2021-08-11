@@ -20,7 +20,7 @@ class ConsumptionProcessor:
             'total_kWh': _t['value_kWh'].sum(),
             'days': _t['value_kWh'].count() / 24.0
         }
-        data['daily_kWh'] = data['total_kWh'] / data['days']
+        data['daily_kWh'] = data['total_kWh'] / data['days'] if data['days'] > 0 else data['total_kWh']
         data['p1_kWh'] = _t['value_kWh'].loc[(_t['datetime'].dt.strftime('%H:%M').isin(LIST_P1)) & (~_t['weekday'].isin(DAYS_P3))].sum()
         data['p2_kWh'] = _t['value_kWh'].loc[(_t['datetime'].dt.strftime('%H:%M').isin(LIST_P2)) & (~_t['weekday'].isin(DAYS_P3))].sum()
         data['p3_kWh'] = data['total_kWh'] - data['p1_kWh'] - data['p2_kWh']
