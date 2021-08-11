@@ -18,11 +18,11 @@ URL = 'https://github.com/uvejota/python-edata'
 EMAIL = 'vmayorg@outlook.es'
 AUTHOR = 'VMG'
 REQUIRES_PYTHON = '>=3.6.0'
-VERSION = '0.1.3'
+VERSION = '0.1.4'
 
 # What packages are required for this module to be executed?
 REQUIRED = [
-     'requests', 'pyjwt', 'pandas', 'logging', 'python-dateutil', 'bs4'
+     'requests', 'pyjwt', 'pandas', 'python-dateutil', 'bs4'
 ]
 
 # What packages are optional?
