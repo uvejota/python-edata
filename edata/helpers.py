@@ -8,15 +8,11 @@ import asyncio
 _LOGGER = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
-PLATFORMS = ['datadis', 'edistribucion']
+PLATFORMS = ['datadis']
 ATTRIBUTES = {
     "cups": None,
     "contract_p1_kW": 'kW',
     "contract_p2_kW": 'kW',
-    "today_kWh": 'kWh',
-    "today_p1_kWh": 'kWh',
-    "today_p2_kWh": 'kWh',
-    "today_p3_kWh": 'kWh',
     "yesterday_kWh": 'kWh',
     "yesterday_p1_kWh": 'kWh',
     "yesterday_p2_kWh": 'kWh',
@@ -33,7 +29,7 @@ ATTRIBUTES = {
     "last_month_p1_kWh": 'kWh',
     "last_month_p2_kWh": 'kWh',
     "last_month_p3_kWh": 'kWh',
-    "max_power": 'kW',
+    "max_power_kW": 'kW',
     "max_power_date": None,
     "max_power_mean_kW": 'kW',
     "max_power_90perc_kW": 'kW'
@@ -53,64 +49,68 @@ class ReportHelper ():
     attributes = {}
 
     def __init__(self, platform, username, password, cups) -> None:
-        _LOGGER.debug ('ReportHelper: initializing')
-        self.__cups = cups
-        self.__loop = None
+        self._cups = cups
+        self._loop = None
+
         if platform == 'datadis':
-            self.__conn = DatadisConnector (username, password)
-        elif platform == 'edistribucion':
-            self.__conn = EdistribucionConnector (username, password)
+            self._conn = DatadisConnector (username, password)
         else:
             raise PlatformError (f'platform {platform} not supported, valid options are {PLATFORMS}')
 
-    def async_update (self, date_from=datetime(1970, 1, 1), date_to=datetime.today()):
-        _LOGGER.debug ('ReportHelper: requesting an async update')
-        if self.__loop is None:
-            self.__loop = asyncio.get_event_loop()
-        self.__loop.run_in_executor(None, self.update, [date_from, date_to])
+        for x in ATTRIBUTES:
+            self.attributes[x] = None
 
-    def update (self, date_from=datetime(1970, 1, 1), date_to=datetime.today()):
-        _LOGGER.debug ('ReportHelper: requesting an update')
-        if (self.update_data (self.__cups, date_from, date_to)):
-            self.update_attr ()
+    async def async_update (self):
+        if self._loop is None:
+            self._loop = asyncio.get_event_loop()
+        self._loop.run_in_executor(None, self.update)
+
+    def update (self):
+        date_from = datetime (
+                datetime.today ().year, 
+                datetime.today ().month, 
+                1, 0, 0, 0
+            ) - relativedelta (months=12)
+        date_to = datetime.today()
+        if self.update_data (self._cups, date_from, date_to):
+            self.data = self._conn.data
+            self.update_attributes ()
 
     def update_data (self, cups, date_from=None, date_to=None):
-        _LOGGER.debug ('ReportHelper: updating data')
-        changed = False
-        self.__conn.update (cups, date_from, date_to)
-        if self.__conn.data is not None and self.data != self.__conn.data:
-            self.data = self.__conn.data
-            changed = True
-        return changed
+        updated = False
+        try:
+            updated = self._conn.update (cups, date_from, date_to)
+        except Exception as e:
+            _LOGGER.error (f"unhandled exception while updating data for CUPS {cups[-4:]}")
+            _LOGGER.exception (e)
+        return updated
 
-    def update_attr (self):
-        _LOGGER.debug ('ReportHelper: updating attributes')
+    def update_attributes (self):
+        for f in [self.update_attr_supplies, self.update_attr_contracts, self.update_attr_consumptions, self.update_attr_maximeter]:
+            try:
+                f()
+            except Exception as e:
+                _LOGGER.error (f"unhandled exception while updating attributes")
+                _LOGGER.exception (e)
 
-        self.update_attr_supplies ()
-        self.update_attr_contracts ()
-        self.update_attr_consumptions ()
-        self.update_attr_maximeter ()
-
-        _LOGGER.debug ('ReportHelper: rounding attributes')
         for a in self.attributes:
             if a in ATTRIBUTES and ATTRIBUTES[a] is not None:
                 self.attributes[a] = round(self.attributes[a], 2) if self.attributes[a] is not None else '-'
 
     def update_attr_supplies (self):
         for i in self.data['supplies']:
-            if i['cups'] == self.__cups:
-                self.attributes['cups'] = self.__cups
+            if i['cups'] == self._cups:
+                self.attributes['cups'] = self._cups
                 break
 
     def update_attr_contracts (self):
         for i in self.data['contracts']:
             if i['date_end'] is None:
-                self.attributes['contract_p1_kW'] = i['power_p1']
-                self.attributes['contract_p2_kW'] = i['power_p2']
+                self.attributes['contract_p1_kW'] = i.get('power_p1', None)
+                self.attributes['contract_p2_kW'] = i.get('power_p2', None)
                 break
 
-    def update_attr_consumptions (self):
-
+    def update_attr_consumptions (self):        
         processor = ConsumptionProcessor (self.data['consumptions'])
 
         today_starts = datetime (
@@ -119,19 +119,12 @@ class ReportHelper ():
             datetime.today ().day, 0, 0, 0
         )
         
-        # update today
-        a = processor.get_stats (today_starts, today_starts + timedelta (days=1))
-        self.attributes["today_kWh"] = a['total_kWh']
-        self.attributes["today_p1_kWh"] = a['p1_kWh']
-        self.attributes["today_p2_kWh"] = a['p2_kWh']
-        self.attributes["today_p3_kWh"] = a['p3_kWh']
-
         # update yesterday
         a = processor.get_stats (today_starts-timedelta(days=1), today_starts)
-        self.attributes["yesterday_kWh"] = a['total_kWh']
-        self.attributes["yesterday_p1_kWh"] = a['p1_kWh']
-        self.attributes["yesterday_p2_kWh"] = a['p2_kWh']
-        self.attributes["yesterday_p3_kWh"] = a['p3_kWh']
+        self.attributes["yesterday_kWh"] = a.get('total_kWh', None)
+        self.attributes["yesterday_p1_kWh"] = a.get('p1_kWh', None)
+        self.attributes["yesterday_p2_kWh"] = a.get('p2_kWh', None)
+        self.attributes["yesterday_p3_kWh"] = a.get('p3_kWh', None)
 
         cycle_starts = datetime (
             datetime.today ().year, 
@@ -140,29 +133,29 @@ class ReportHelper ():
 
         # update current cycle
         a = processor.get_stats (cycle_starts, cycle_starts + relativedelta(months=1))
-        self.attributes["month_kWh"] = a['total_kWh']
-        self.attributes["month_days"] = a['days']
-        self.attributes["month_daily_kWh"] = a['daily_kWh']
-        self.attributes["month_p1_kWh"] = a['p1_kWh']
-        self.attributes["month_p2_kWh"] = a['p2_kWh']
-        self.attributes["month_p3_kWh"] = a['p3_kWh']
+        self.attributes["month_kWh"] = a.get('total_kWh', None)
+        self.attributes["month_days"] = a.get('days', None)
+        self.attributes["month_daily_kWh"] = a.get('daily_kWh', None)
+        self.attributes["month_p1_kWh"] = a.get('p1_kWh', None)
+        self.attributes["month_p2_kWh"] = a.get('p2_kWh', None)
+        self.attributes["month_p3_kWh"] = a.get('p3_kWh', None)
 
         # update last cycle
         a = processor.get_stats (cycle_starts - relativedelta (months=1), cycle_starts)
-        self.attributes["last_month_kWh"] = a['total_kWh']
-        self.attributes["last_month_days_kWh"] = a['days']
-        self.attributes["last_month_daily_kWh"] = a['daily_kWh']
-        self.attributes["last_month_p1_kWh"] = a['p1_kWh']
-        self.attributes["last_month_p2_kWh"] = a['p2_kWh']
-        self.attributes["last_month_p3_kWh"] = a['p3_kWh']
+        self.attributes["last_month_kWh"] = a.get('total_kWh', None)
+        self.attributes["last_month_days_kWh"] = a.get('days', None)
+        self.attributes["last_month_daily_kWh"] = a.get('daily_kWh', None)
+        self.attributes["last_month_p1_kWh"] = a.get('p1_kWh', None)
+        self.attributes["last_month_p2_kWh"] = a.get('p2_kWh', None)
+        self.attributes["last_month_p3_kWh"] = a.get('p3_kWh', None)
 
     def update_attr_maximeter (self):
         processor = MaximeterProcessor (self.data['maximeter'])
         a = processor.get_stats (datetime.today() - timedelta(days=365), datetime.today())
-        self.attributes['max_power_kW'] = a['peak_kW']
-        self.attributes['max_power_date'] = a['peak_date']
-        self.attributes['max_power_mean_kW'] = a['peak_mean_kWh']
-        self.attributes['max_power_90perc_kW'] = a['peak_tile90_kWh']
+        self.attributes['max_power_kW'] = a.get('peak_kW', None)
+        self.attributes['max_power_date'] = a.get('peak_date', None)
+        self.attributes['max_power_mean_kW'] = a.get('peak_mean_kWh', None)
+        self.attributes['max_power_90perc_kW'] = a.get('peak_tile90_kWh', None)
 
     def __str__(self) -> str:
         return '\n'.join([f'{i}: {self.attributes[i]}' for i in self.attributes])
