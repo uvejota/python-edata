@@ -22,6 +22,21 @@ def update_dictlist (old_lst, new_lst, key):
     old_copy.extend(nn)
     return old_copy
 
+def filter_consumptions_dictlist (lst, date_from, date_to):
+    new_lst = []
+    wdate_from = None
+    wdate_to = None
+    for i in lst:
+        if (date_from <= i['datetime'] <= date_to):
+            if i['value_kWh'] > 0:
+                if wdate_from is None or i['datetime'] < wdate_from:
+                    wdate_from = i['datetime']
+                if wdate_to is None or i['datetime'] > wdate_to:
+                    wdate_to = i['datetime']
+            new_lst.append(i)
+    _LOGGER.debug (f'found data from {wdate_from} to {wdate_to}')
+    return new_lst, (wdate_from, wdate_to)
+
 class ConnectorError(Exception):
 
     def __init__(self, message):
@@ -102,25 +117,33 @@ class DatadisConnector (BaseConnector):
 
     def update (self, cups, date_from=datetime(1970, 1, 1), date_to=datetime.today()):
         _LOGGER.debug (f"DatadisConnector: updating data for CUPS {cups[-4:]} from {date_from} to {date_to}")
+        is_updated = False
         if (datetime.now() - self.__lastAttempt) > self.UPDATE_INTERVAL:
+            is_updated = True
             self.__lastAttempt = datetime.now()
             data_bck = self.data
-            self.data['consumptions'] = []
+            self.data['consumptions'], (got_from, got_to) = filter_consumptions_dictlist (self.data['consumptions'], date_from, date_to)
+            date_from = got_to if got_from is not None and got_from <= date_from else date_from
+            date_to = date_to
+            _LOGGER.debug (f"DatadisConnector: updating data for CUPS {cups[-4:]} from {date_from} to {date_to}")
             self.data['maximeter'] = []
             try:
                 self.data['supplies'] = self.get_supplies ()
                 for supply in self.data['supplies']:
-                    if cups == supply['cups'] and (
-                        (supply['date_start'] <= date_from <= (supply['date_end'] if supply['date_end'] is not None else date_from)) or (
-                            supply['date_start'] <= date_to <= (supply['date_end'] if supply['date_end'] is not None else date_to))):
-                        p_date_start = max (date_from, supply['date_start'])
-                        p_date_end = min (date_to, supply['date_end']) if supply['date_end'] is not None else date_to
+                    start_in_range = supply['date_start'] <= date_from <= (supply['date_end'] if supply['date_end'] is not None else date_from)
+                    end_in_range = supply['date_start'] <= date_to <= (supply['date_end'] if supply['date_end'] is not None else date_to)
+                    if cups == supply['cups'] and (start_in_range or end_in_range):
+                        p_date_start = date_from if start_in_range and date_from >= supply['date_start'] else supply['date_start']
+                        p_date_end = date_to if supply['date_end'] is None or (end_in_range and date_to <= supply['date_end']) else supply['date_end']
+                        _LOGGER.debug (f"DatadisConnector: checking supply {supply['cups'][-4:]} from {p_date_start} to {p_date_end}")
                         self.data['contracts'] = self.get_contract_detail (cups, supply['distributorCode'])
                         for contract in self.data['contracts']:
-                            if (contract['date_start'] <= date_from <= (contract['date_end'] if contract['date_end'] is not None else date_from)) or (
-                            contract['date_start'] <= date_to <= (contract['date_end'] if contract['date_end'] is not None else date_to)):
-                                p_date_start = max (p_date_start, contract['date_start'])
-                                p_date_end = min (p_date_end, contract['date_end']) if contract['date_end'] is not None else p_date_end
+                            start_in_range = contract['date_start'] <= date_from <= (contract['date_end'] if contract['date_end'] is not None else date_from)
+                            end_in_range = contract['date_start'] <= date_to <= (contract['date_end'] if contract['date_end'] is not None else date_to)
+                            if start_in_range or end_in_range:
+                                p_date_start = date_from if start_in_range and date_from >= contract['date_start'] else contract['date_start']
+                                p_date_end = date_to if contract['date_end'] is None or (end_in_range and date_to <= contract['date_end']) else contract['date_end']
+                                _LOGGER.debug (f"DatadisConnector: checking contract from {p_date_start} to {p_date_end}")
                                 r = self.get_consumption_data (cups,  supply["distributorCode"],  p_date_start,  p_date_end,  "0", str(supply['pointType']))
                                 self.data['consumptions'] = update_dictlist(self.data['consumptions'], r, 'datetime')
                                 r = self.get_max_power (cups, supply["distributorCode"], contract['date_start'] + relativedelta(months=1), p_date_end)
@@ -137,6 +160,7 @@ class DatadisConnector (BaseConnector):
                 raise e
         else:
             _LOGGER.debug ('ignoring update request due to update interval limit')
+        return is_updated
 
     def get_supplies (self, authorizedNif=None):
         data = {}

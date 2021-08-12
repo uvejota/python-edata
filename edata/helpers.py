@@ -70,24 +70,20 @@ class ReportHelper ():
         self.__loop.run_in_executor(None, self.update)
 
     def update (self):
-        _LOGGER.debug ('ReportHelper: requesting an update')
         date_from = datetime (
                 datetime.today ().year, 
                 datetime.today ().month, 
                 1, 0, 0, 0
             ) - relativedelta (months=12)
         date_to = datetime.today()
-        if (self.update_data (self.__cups, date_from, date_to)):
+        _LOGGER.debug (f'ReportHelper: requesting an update from {date_from} to {date_to}')
+        if self.update_data (self.__cups, date_from, date_to):
+            self.data = self.__conn.data
             self.update_attr ()
 
     def update_data (self, cups, date_from=None, date_to=None):
-        _LOGGER.debug ('ReportHelper: updating data')
-        changed = False
-        self.__conn.update (cups, date_from, date_to)
-        if self.__conn.data is not None and self.data != self.__conn.data:
-            self.data = self.__conn.data
-            changed = True
-        return changed
+        _LOGGER.debug (f'ReportHelper: updating data from {date_from} to {date_to}')
+        return self.__conn.update (cups, date_from, date_to)
 
     def update_attr (self):
         _LOGGER.debug ('ReportHelper: updating attributes')
