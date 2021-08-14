@@ -75,7 +75,7 @@ class DatadisConnector (BaseConnector):
             'maximeter': []
         }
 
-    def __get_token (self):
+    def _get_token (self):
         _LOGGER.info ('DatadisConnector: no token found, fetching a new one...')
         is_valid_token = False
         self._session = requests.Session()
@@ -93,12 +93,12 @@ class DatadisConnector (BaseConnector):
             _LOGGER.error (f'DatadisConnector: unknown error while retrieving token, got {r.text}')
         return is_valid_token
 
-    def __send_cmd (self, url, data={}, refresh_token=False):
+    def _send_cmd (self, url, data={}, refresh_token=False):
         # refresh token if needed (recursive approach)
         is_valid_token = False
         response = []
         if refresh_token:
-            is_valid_token = self.__get_token ()
+            is_valid_token = self._get_token ()
         if is_valid_token or not refresh_token:
             # build get parameters
             params = '?' if len(data) > 0 else ''
@@ -113,7 +113,7 @@ class DatadisConnector (BaseConnector):
                 _LOGGER.info (f"DatadisConnector: got a valid response for {url + params}")
                 response = r.json()
             elif (r.status_code == 401 and not refresh_token):
-                response = self.__send_cmd (url, data=data, refresh_token=True)
+                response = self._send_cmd (url, data=data, refresh_token=True)
             else:
                 _LOGGER.error (f'{url + params} returned {r.text} with code {r.status_code}')
         return response
@@ -172,7 +172,7 @@ class DatadisConnector (BaseConnector):
         data = {}
         if authorizedNif is not None:
             data['authorizedNif'] = authorizedNif
-        r = self.__send_cmd("https://datadis.es/api-private/api/get-supplies", data=data)
+        r = self._send_cmd("https://datadis.es/api-private/api/get-supplies", data=data)
         c = []
         for i in r:
             if all (k in i for k in ("cups", "validDateFrom", "validDateTo", 'pointType', 'distributorCode')):
@@ -200,7 +200,7 @@ class DatadisConnector (BaseConnector):
             }
         if authorizedNif is not None:
             data['authorizedNif'] = authorizedNif
-        r = self.__send_cmd("https://datadis.es/api-private/api/get-contract-detail", data=data)
+        r = self._send_cmd("https://datadis.es/api-private/api/get-contract-detail", data=data)
         c = []
         for i in r:
             if all (k in i for k in ("startDate", "endDate", "marketer", "contractedPowerkW")):
@@ -227,7 +227,7 @@ class DatadisConnector (BaseConnector):
             }
         if authorizedNif is not None:
             data['authorizedNif'] = authorizedNif
-        r = self.__send_cmd("https://datadis.es/api-private/api/get-consumption-data", data=data)
+        r = self._send_cmd("https://datadis.es/api-private/api/get-consumption-data", data=data)
         c = []
         for i in r:
             if all (k in i for k in ("time", "date", "consumptionKWh", "obtainMethod")):
@@ -251,7 +251,7 @@ class DatadisConnector (BaseConnector):
             }
         if authorizedNif is not None:
             data['authorizedNif'] = authorizedNif
-        r = self.__send_cmd("https://datadis.es/api-private/api/get-max-power", data=data)
+        r = self._send_cmd("https://datadis.es/api-private/api/get-max-power", data=data)
         c = []
         for i in r:
             if all (k in i for k in ("time", "date", "maxPower")):
@@ -292,7 +292,7 @@ class EdistribucionConnector(BaseConnector):
             'maximeter': []
         }
         
-    def __get_url(self, url,get=None,post=None,json=None,cookies=None,headers=None):
+    def _get_url(self, url,get=None,post=None,json=None,cookies=None,headers=None):
         _headers = {
             'User-Agent':'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.14; rv:77.0) Gecko/20100101 Firefox/77.0',
         }
@@ -306,7 +306,7 @@ class EdistribucionConnector(BaseConnector):
             raise ConnectorError (f'EdistribucionConnector: {url} returned {r.text} with code {r.status_code}')
         return r
     
-    def __send_cmd(self, command, post=None, dashboard=None, accept='*/*', content_type=None):
+    def _send_cmd(self, command, post=None, dashboard=None, accept='*/*', content_type=None):
 
         if dashboard is None: dashboard = self._dashboard 
 
@@ -324,7 +324,7 @@ class EdistribucionConnector(BaseConnector):
         if content_type is not None:
             headers['Content-Type'] = content_type
 
-        r = self.__get_url(dashboard+command, post=post, headers=headers)
+        r = self._get_url(dashboard+command, post=post, headers=headers)
         if ('window.location.href' in r.text or 'clientOutOfSync' in r.text):
                 _LOGGER.info ('Redirection received. Aborting command.')
         elif ('json' in r.headers['Content-Type']):
@@ -336,11 +336,11 @@ class EdistribucionConnector(BaseConnector):
         
         return r
         
-    def __get_token(self):
+    def _get_token(self):
         if (not (self._token != 'undefined' and self._access_date+timedelta(minutes=10) > datetime.now())):
             _LOGGER.debug('Login')
             self._session = requests.Session()
-            r = self.__get_url('https://zonaprivada.edistribucion.com/areaprivada/s/login?ec=302&startURL=%2Fareaprivada%2Fs%2F')
+            r = self._get_url('https://zonaprivada.edistribucion.com/areaprivada/s/login?ec=302&startURL=%2Fareaprivada%2Fs%2F')
             ix = r.text.find('auraConfig')
             if (ix == -1):
                 raise ConnectorError ('EdistribucionConnector: auraConfig not found. Cannot continue')
@@ -352,7 +352,7 @@ class EdistribucionConnector(BaseConnector):
                     continue
                 #print(s)
                 upr = urlparse(r.url)
-                r = self.__get_url(upr.scheme+'://'+upr.netloc+src)
+                r = self._get_url(upr.scheme+'://'+upr.netloc+src)
                 if ('resources.js' in src):
                     unq = unquote(src)
                     self._context = unq[unq.find('{'):unq.rindex('}')+1]
@@ -364,21 +364,21 @@ class EdistribucionConnector(BaseConnector):
                     'aura.pageURI':'/areaprivada/s/login/?language=es&startURL=%2Fareaprivada%2Fs%2F&ec=302',
                     'aura.token':'undefined',
                     }
-            r = self.__get_url(self._dashboard+'other.LightningLoginForm.login=1',post=data)
+            r = self._get_url(self._dashboard+'other.LightningLoginForm.login=1',post=data)
             #print(r.text)
             if ('/*ERROR*/' in r.text):
                 if ('invalidSession' in r.text):
                     self._session = requests.Session()
-                    self.__get_token()
+                    self._get_token()
                 raise ConnectorError ('EdistribucionConnector: login failed, credentials might be wrong')
             jr = r.json()
             if ('events' not in jr):
                 raise ConnectorError ('EdistribucionConnector: login failed, credentials might be wrong')
             
             _LOGGER.debug('Accessing to frontdoor')
-            r = self.__get_url(jr['events'][0]['attributes']['values']['url'])
+            r = self._get_url(jr['events'][0]['attributes']['values']['url'])
             _LOGGER.debug('Accessing to landing page')
-            r = self.__get_url('https://zonaprivada.edistribucion.com/areaprivada/s/')
+            r = self._get_url('https://zonaprivada.edistribucion.com/areaprivada/s/')
             ix = r.text.find('auraConfig')
             if (ix == -1):
                 raise ConnectorError ('EdistribucionConnector: auraConfig not found. Cannot continue')
@@ -441,7 +441,7 @@ class EdistribucionConnector(BaseConnector):
 
     def get_supplies (self):
         supplies = []
-        self.__get_token()
+        self._get_token()
         lst = self.__getListCups ()
         for s in lst['data']['lstCups']:
             new_supply = {
@@ -460,7 +460,7 @@ class EdistribucionConnector(BaseConnector):
 
     def get_contract_detail (self, cups):
         contracts = []
-        self.__get_token()
+        self._get_token()
         lst = self.__getListCups ()
         for c in lst['data']['lstContAux']:
             if c['CUPs__r']['Name'] == cups:
@@ -490,7 +490,7 @@ class EdistribucionConnector(BaseConnector):
             
     def get_consumption_data (self, cont_id, startDate, endDate):
         consumptions = []
-        self.__get_token()
+        self._get_token()
         start_str = startDate.strftime ("%Y-%m-%d")
         end_str = endDate.strftime ("%Y-%m-%d")
         c = self.__getChartPointsByRange (cont_id, start_str, end_str)['data']['lstData']
@@ -508,7 +508,7 @@ class EdistribucionConnector(BaseConnector):
 
     def get_max_power (self, cups_id, startDate, endDate):
         maximeter = []
-        self.__get_token()
+        self._get_token()
         m = self.__getHistogramPoints (cups_id, startDate.strftime("%m/%Y"), endDate.strftime("%m/%Y"))['data']['lstData']
         [maximeter.append({
                     'datetime': datetime.strptime (f"{i['date']} {i['hour']}", '%d-%m-%Y %H:%M'),
@@ -518,7 +518,7 @@ class EdistribucionConnector(BaseConnector):
 
     def get_meter_data (self, cups_id):
         meter = {}
-        self.__get_token()
+        self._get_token()
         r = self.__consultarContador (cups_id)['data']
         meter['power_kw'] = r['potenciaActual'] if 'potenciaActual' in r else None
         meter['power_%'] = (r['potenciaActual'] / r['potenciaContratada']) if ('potenciaActual' in r and 'potenciaContratada' in r) else None
@@ -535,34 +535,34 @@ class EdistribucionConnector(BaseConnector):
     def __getLoginInfo(self):
         cmd = 'other.WP_Monitor_CTRL.getLoginInfo=1'
         msg = '{"actions":[{"id":"215;a","descriptor":"apex://WP_Monitor_CTRL/ACTION$getLoginInfo","callingDescriptor":"markup://c:WP_Monitor","params":{"serviceNumber":"S011"}}]}'
-        return self.__send_cmd (cmd, post={'message': msg})
+        return self._send_cmd (cmd, post={'message': msg})
         
     def __getListCups(self):
         msg = '{"actions":[{"id":"1086;a","descriptor":"apex://WP_Measure_v3_CTRL/ACTION$getListCups","callingDescriptor":"markup://c:WP_Measure_List_v4","params":{"sIdentificador":"'+self._identities['account_id']+'"}}]}',
         cmd = 'other.WP_Measure_v3_CTRL.getListCups=1'
-        return self.__send_cmd (cmd, post={'message': msg})
+        return self._send_cmd (cmd, post={'message': msg})
 
     def __getATRDetail(self, atr):
         msg = '{"actions":[{"id":"62;a","descriptor":"apex://WP_ContractATRDetail_CTRL/ACTION$getATRDetail","callingDescriptor":"markup://c:WP_SuppliesATRDetailForm","params":{"atrId":"'+atr+'"}}]}',
         cmd = 'other.WP_ContractATRDetail_CTRL.getATRDetail=1'
-        return self.__send_cmd (cmd, post={'message': msg})
+        return self._send_cmd (cmd, post={'message': msg})
 
     def __getChartPointsByRange (self, cont, date_start, date_end):
         msg = '{"actions":[{"id":"981;a","descriptor":"apex://WP_Measure_v3_CTRL/ACTION$getChartPointsByRange","callingDescriptor":"markup://c:WP_Measure_Detail_Filter_Advanced_v3","params":{"contId":"'+cont+'","type":"4","startDate":"'+date_start+'","endDate":"'+date_end+'"},"version":null,"longRunning":true}]}'
         cmd = 'other.WP_Measure_v3_CTRL.getChartPointsByRange=1'
-        return self.__send_cmd (cmd, post={'message': msg})
+        return self._send_cmd (cmd, post={'message': msg})
         
     def __getHistogramPoints (self, cups_id, date_start, date_end):
         msg = '{"actions":[{"id":"688;a","descriptor":"apex://WP_MaximeterHistogram_CTRL/ACTION$getHistogramPoints","callingDescriptor":"markup://c:WP_MaximeterHistogramDetail","params":{"mapParams":{"startDate":"'+date_start+'","endDate":"'+date_end+'","id":"'+cups_id+'","sIdentificador":"'+self._identities['account_id']+'"}}}]}',
         cmd = 'other.WP_MaximeterHistogram_CTRL.getHistogramPoints=1'
-        return self.__send_cmd (cmd, post={'message': msg})
+        return self._send_cmd (cmd, post={'message': msg})
     
     def __consultarContador(self, cups_id):
         msg = '{"actions":[{"id":"471;a","descriptor":"apex://WP_ContadorICP_F2_CTRL/ACTION$consultarContador","callingDescriptor":"markup://c:WP_Reconnect_Detail_F2","params":{"cupsId":"'+cups_id+'"}}]}',
         cmd = 'other.WP_ContadorICP_F2_CTRL.consultarContador=1'
-        return self.__send_cmd (cmd, post={'message': msg})
+        return self._send_cmd (cmd, post={'message': msg})
 
     def __get_cycle_list(self, cont):
         msg = '{"actions":[{"id":"1190;a","descriptor":"apex://WP_Measure_v3_CTRL/ACTION$getInfo","callingDescriptor":"markup://c:WP_Measure_Detail_v4","params":{"contId":"'+cont+'"},"longRunning":true}]}',
         cmd = 'other.WP_Measure_v3_CTRL.getInfo=1'
-        return self.__send_cmd (cmd, post={'message': msg})
+        return self._send_cmd (cmd, post={'message': msg})
