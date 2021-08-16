@@ -137,6 +137,7 @@ class DatadisConnector ():
                             r = self.get_consumption_data (cups,  supply["distributorCode"],  p_date_start,  p_date_end,  "0", str(supply['pointType']))
                             self.data['consumptions'] = update_dictlist(self.data['consumptions'], r, 'datetime')
                             _LOGGER.debug (f"{_LABEL}: fetching maximeter from {p_date_start} to {p_date_end}")
+                            p_date_end = min (p_date_end - relativedelta (months=1), datetime.today() - relativedelta (months=1))
                             p_date_start = min (p_date_start + relativedelta(months=1), p_date_end)
                             r = self.get_max_power (cups, supply["distributorCode"], p_date_start, p_date_end)
                             self.data['maximeter'] = update_dictlist(self.data['maximeter'], r, 'datetime')
@@ -154,7 +155,7 @@ class DatadisConnector ():
             if all (k in i for k in ("cups", "validDateFrom", "validDateTo", 'pointType', 'distributorCode')):
                 d = {
                     'cups': i['cups'],
-                    'date_start': datetime.strptime (i['validDateFrom'], '%Y/%m/%d'),
+                    'date_start': datetime.strptime (i.get('validDateFrom', '1970/01/01'), '%Y/%m/%d'),
                     'date_end': datetime.strptime (i['validDateTo'], '%Y/%m/%d') if i['validDateTo'] != '' else None,
                     'address': i['address'] if 'address' in i else None,
                     'postal_code': i['postalCode'] if 'postalCode' in i else None,
@@ -181,7 +182,7 @@ class DatadisConnector ():
         for i in r:
             if all (k in i for k in ("startDate", "endDate", "marketer", "contractedPowerkW")):
                 d = {
-                    'date_start': datetime.strptime (i['startDate'], '%Y/%m/%d') if i['startDate'] != '' else None,
+                    'date_start': datetime.strptime (i.get('startDate', '1970/01/01'), '%Y/%m/%d'),
                     'date_end': datetime.strptime (i['endDate'], '%Y/%m/%d') if i['endDate'] != '' else None,
                     'marketer': i['marketer'],
                     'power_p1': i['contractedPowerkW'][0] if isinstance(i['contractedPowerkW'], list) else None,

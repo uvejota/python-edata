@@ -150,8 +150,14 @@ class ReportHelper ():
         self.attributes["last_month_p3_kWh"] = a.get('p3_kWh', None)
 
     def update_attr_maximeter (self):
+
+        date_from = datetime (
+                datetime.today ().year, 
+                datetime.today ().month, 
+                1, 0, 0, 0
+            ) - relativedelta (months=12)
         processor = MaximeterProcessor (self.data['maximeter'])
-        a = processor.get_stats (datetime.today() - timedelta(days=365), datetime.today())
+        a = processor.get_stats (date_from, datetime.today())
         self.attributes['max_power_kW'] = a.get('peak_kW', None)
         self.attributes['max_power_date'] = a.get('peak_date', None)
         self.attributes['max_power_mean_kW'] = a.get('peak_mean_kWh', None)
