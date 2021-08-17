@@ -18,11 +18,10 @@ class ConsumptionProcessor:
     
     def __init__ (self, lst):
         self.stats = {}
-        try:
+        if len(lst) > 0:
             self.df = self.preprocess (pd.DataFrame(lst))
-        except Exception as e:
-            _LOGGER.warning ('consumptions data structure is not valid')
-            _LOGGER.exception (e)
+        else:
+            self.valid_data = False
 
     def preprocess (self, df):
 
@@ -45,6 +44,7 @@ class ConsumptionProcessor:
             self.valid_data = True
         else:
             self.valid_data = False
+            _LOGGER.warning ('consumptions data structure is not valid')
 
         return df
 
@@ -91,13 +91,16 @@ class MaximeterProcessor:
     def __init__(self, lst) -> None:
         self.stats = {}
         _df = pd.DataFrame(lst)
-        if 'datetime' in _df and 'value_kW' in _df:
-            _df['datetime'] = pd.to_datetime(_df['datetime'])
-            self.df = _df
-            self.valid_data = True
+        if len(lst) > 0:
+            if 'datetime' in _df and 'value_kW' in _df:
+                _df['datetime'] = pd.to_datetime(_df['datetime'])
+                self.df = _df
+                self.valid_data = True
+            else:
+                self.valid_data = False
+                _LOGGER.warning ('maximeter data structure is not valid')
         else:
             self.valid_data = False
-            _LOGGER.warning ('maximeter data structure is not valid')
 
     def get_stats (self, dt_from, dt_to):
         if self.valid_data:

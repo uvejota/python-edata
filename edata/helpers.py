@@ -95,7 +95,7 @@ class ReportHelper ():
 
         for a in self.attributes:
             if a in ATTRIBUTES and ATTRIBUTES[a] is not None:
-                self.attributes[a] = round(self.attributes[a], 2) if self.attributes[a] is not None else '-'
+                self.attributes[a] = round(self.attributes[a], 2) if self.attributes[a] is not None else None
 
     def update_attr_supplies (self):
         for i in self.data['supplies']:
@@ -104,8 +104,10 @@ class ReportHelper ():
                 break
 
     def update_attr_contracts (self):
+        most_recent_date = datetime (1970, 1, 1)
         for i in self.data['contracts']:
-            if i['date_end'] is None:
+            if i['date_end'] > most_recent_date:
+                most_recent_date = i['date_end']
                 self.attributes['contract_p1_kW'] = i.get('power_p1', None)
                 self.attributes['contract_p2_kW'] = i.get('power_p2', None)
                 break
