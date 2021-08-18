@@ -8,6 +8,7 @@ from dateutil.relativedelta import relativedelta
 
 
 _LOGGER = logging.getLogger(__name__)
+logging.basicConfig(level=logging.WARNING)
 
 _LABEL = 'Connector'
 
@@ -21,7 +22,7 @@ class DatadisConnector ():
     _last_try = datetime(1970, 1, 1)
 
     def __init__(self, username, password, log_level=logging.WARNING):
-        logging.basicConfig(level=log_level)
+        logging.getLogger().setLevel(log_level)
         self._usr = username
         self._pwd = password
         self._session = requests.Session()

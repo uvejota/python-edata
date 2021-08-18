@@ -6,6 +6,7 @@ from edata.processors import *
 import asyncio
 
 _LOGGER = logging.getLogger(__name__)
+logging.basicConfig(level=logging.WARNING)
 
 PLATFORMS = ['datadis']
 ATTRIBUTES = {
@@ -50,7 +51,7 @@ class ReportHelper ():
     def __init__(self, platform, username, password, cups, log_level=logging.WARNING) -> None:
         self._cups = cups
         self._loop = None
-        logging.basicConfig(level=log_level)
+        logging.getLogger().setLevel(log_level)
 
         if platform == 'datadis':
             self._conn = DatadisConnector (username, password, log_level=log_level)
