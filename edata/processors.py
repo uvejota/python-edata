@@ -18,10 +18,7 @@ class ConsumptionProcessor:
     
     def __init__ (self, lst):
         self.stats = {}
-        if len(lst) > 0:
-            self.df = self.preprocess (pd.DataFrame(lst))
-        else:
-            self.valid_data = False
+        self.df = self.preprocess (pd.DataFrame(lst))
 
     def preprocess (self, df):
 
@@ -91,16 +88,13 @@ class MaximeterProcessor:
     def __init__(self, lst) -> None:
         self.stats = {}
         _df = pd.DataFrame(lst)
-        if len(lst) > 0:
-            if 'datetime' in _df and 'value_kW' in _df:
-                _df['datetime'] = pd.to_datetime(_df['datetime'])
-                self.df = _df
-                self.valid_data = True
-            else:
-                self.valid_data = False
-                _LOGGER.warning ('maximeter data structure is not valid')
+        if 'datetime' in _df and 'value_kW' in _df:
+            _df['datetime'] = pd.to_datetime(_df['datetime'])
+            self.df = _df
+            self.valid_data = True
         else:
             self.valid_data = False
+            _LOGGER.warning ('maximeter data structure is not valid')
 
     def get_stats (self, dt_from, dt_to):
         if self.valid_data:
