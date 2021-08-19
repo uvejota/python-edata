@@ -1,11 +1,11 @@
-from abc import ABC, abstractmethod
-import requests, jwt, logging, json
-from bs4 import BeautifulSoup as bs
-from urllib.parse import urlparse, unquote
+import requests, jwt, logging
 import logging
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
-
+from edata.processors import DataUtils as du
+# EsiosConnector:
+from aiopvpc import PVPCData, TARIFFS
+import pytz as tz
 
 _LOGGER = logging.getLogger(__name__)
 logging.basicConfig(level=logging.WARNING)
@@ -19,24 +19,25 @@ class DatadisConnector ():
     _pwd = None
     _session = None
 
-    _last_try = datetime(1970, 1, 1)
+    _last_try = datetime(1970, 1, 1)    
 
-    def __init__(self, username, password, log_level=logging.WARNING):
+    def __init__(self, username, password, data = {'supplies': [], 'contracts': [], 'consumptions': [], 'maximeter': []}, log_level=logging.WARNING):
         logging.getLogger().setLevel(log_level)
         self._usr = username
         self._pwd = password
         self._session = requests.Session()
-        self.data = {
-            'supplies': [],
-            'contracts': [],
-            'consumptions': [],
-            'maximeter': []
-        }
+        self.data = data
         self.status = {
             'supplies': False,
             'contracts': False,
             'consumptions': False,
             'maximeter': False
+        }
+        self.last_update = {
+            'supplies': datetime(1970, 1, 1),
+            'contracts': datetime(1970, 1, 1),
+            'consumptions': datetime(1970, 1, 1),
+            'maximeter': datetime(1970, 1, 1)
         }
 
     def _get_token (self):
@@ -74,123 +75,111 @@ class DatadisConnector ():
             r = self._session.get(url + params)
             # eval response
             if (r.status_code == 200 and r.json()):
-                _LOGGER.info (f"{_LABEL}: got a valid response for {url + params}")
+                _LOGGER.debug (f"{_LABEL}: got a valid response for {url + params}")
                 response = r.json()
             elif (r.status_code == 401 and not refresh_token):
                 response = self._send_cmd (url, data=data, refresh_token=True)
             elif (r.status_code == 200):
-                _LOGGER.warning (f'{url + params} returned a valid but empty response, try again later')
+                _LOGGER.error (f'{url + params} returned a valid but empty response, try again later')
             else:
                 _LOGGER.error (f'{url + params} returned {r.text} with code {r.status_code}')
         return response
 
-    def update (self, cups, date_from=datetime(1970, 1, 1), date_to=datetime.today()):
-
-        def update_dictlist (old_lst, new_lst, key):
-            old_copy = old_lst
-            nn = []
-            for n in new_lst:
-                for o in old_copy:
-                    if n[key] == o[key]:
-                        o = n
-                        break
-                else:
-                    nn.append (n)
-            old_copy.extend(nn)
-            return old_copy
-
-        def filter_consumptions_dictlist (lst, date_from, date_to):
-            new_lst = []
-            wdate_from = None
-            wdate_to = None
-            for i in lst:
-                if (date_from <= i['datetime'] <= date_to):
-                    if i['value_kWh'] > 0:
-                        if wdate_from is None or i['datetime'] < wdate_from:
-                            wdate_from = i['datetime']
-                        if wdate_to is None or i['datetime'] > wdate_to:
-                            wdate_to = i['datetime']
-                    new_lst.append(i)
-            _LOGGER.debug (f'found data from {wdate_from} to {wdate_to}')
-            return new_lst, (wdate_from, wdate_to)
-            
+    def update (self, cups, date_from=datetime(1970, 1, 1), date_to=datetime.today()):            
         _LOGGER.info (f"{_LABEL}: update requested for CUPS {cups[-4:]} from {date_from} to {date_to}")
         is_updated = False
         if (datetime.now() - self._last_try) > self.UPDATE_INTERVAL:
             is_updated = True
             self._last_try = datetime.now()
-            self.data['consumptions'], (got_from, got_to) = filter_consumptions_dictlist (self.data['consumptions'], date_from, date_to)
-            _LOGGER.info (f"{_LABEL}: data found for {cups[-4:]} from {got_from} to {got_to}")
-            date_from = got_to if got_from is not None and got_from <= date_from else date_from
-            date_to = date_to
-            _LOGGER.info (f"{_LABEL}: requesting missing data for {cups[-4:]} from {date_from} to {date_to}")
-            # request supplies
-            supplies = self.get_supplies ()
-            if len (supplies) > 0:
-                self.status['supplies'] = True
-                self.data['supplies'] = supplies
-                _LOGGER.info (f"{_LABEL}: supplies data has been successfully updated ({len(supplies)} elements)")
-            else:
-                self.status['supplies'] = False
-                _LOGGER.info (f"{_LABEL}: supplies data was not updated")
-            supply_found = False
-            for supply in self.data['supplies']:
-                supply_found = True
-                start_in_range = supply['date_start'] <= date_from <= supply['date_end']
-                end_in_range = supply['date_start'] <= date_to <= supply['date_end']
-                if cups == supply['cups']:
-                    if (start_in_range or end_in_range):
-                        _LOGGER.info (f"{_LABEL}: found a valid supply for CUPS {cups[-4:]} with range from {supply['date_start']} to {supply['date_end']}")
-                        # request contracts
-                        contracts = self.get_contract_detail (cups, supply['distributorCode'])
-                        if len (contracts) > 0:
-                            self.status['contracts'] = True
-                            self.data['contracts'] = update_dictlist(self.data['contracts'], contracts, 'date_start')
-                            _LOGGER.info (f"{_LABEL}: contracts data has been successfully updated ({len(contracts)} elements)")
-                        else:
-                            self.status['contracts'] = False
-                            _LOGGER.info (f"{_LABEL}: contracts data was not updated")
-                        for contract in self.data['contracts']:
-                            start_in_range = contract['date_start'] <= date_from <= contract['date_end']
-                            end_in_range = contract['date_start'] <= date_to <= contract['date_end']
-                            if (contract['distributorCode'] == supply['distributorCode']) and (start_in_range or end_in_range):
-                                # request consumptions
-                                _LOGGER.info (f"{_LABEL}: found a valid contract for CUPS {cups[-4:]} with range from {contract['date_start']} to {contract['date_end']}")
-                                p_date_start = max ([date_from, supply['date_start'], contract['date_start']])
-                                p_date_end = min ([date_to, supply['date_end'], contract['date_end']])
-                                _LOGGER.info (f"{_LABEL}: fetching consumptions from {p_date_start} to {p_date_end}")
-                                r = self.get_consumption_data (cups,  supply["distributorCode"],  p_date_start,  p_date_end,  "0", supply['pointType'])
-                                if len (r) > 0:
-                                    self.status['consumptions'] = True
-                                    self.data['consumptions'] = update_dictlist(self.data['consumptions'], r, 'datetime')
-                                    _LOGGER.info (f"{_LABEL}: consumptions data has been successfully updated ({len(r)} elements)")
-                                else:
-                                    self.status['consumptions'] = False
-                                    _LOGGER.info (f"{_LABEL}: consumptions data was not updated")
-                                # request maximeter
-                                m_date_start = max ([date_from, supply['date_start'], contract['date_start']]) + relativedelta(months=1)
-                                m_date_end = min ([date_to, supply['date_end'], contract['date_end']])
-                                if m_date_end > m_date_start:
-                                    _LOGGER.info (f"{_LABEL}: fetching maximeter from {m_date_start} to {m_date_end}")
-                                    r = self.get_max_power (cups, supply["distributorCode"], m_date_start, m_date_end)
-                                    if len (r) > 0:
-                                        self.status['maximeter'] = True
-                                        self.data['maximeter'] = update_dictlist(self.data['maximeter'], r, 'datetime')
-                                        _LOGGER.info (f"{_LABEL}: maximeter data has been successfully updated ({len(r)} elements)")
+            self.data['consumptions'], missing = du.extract_dt_ranges (self.data['consumptions'], date_from, date_to, gap_interval=timedelta(hours=24))
+            _LOGGER.info (f"{_LABEL}: missing data: {missing}")
+            for gap in missing:
+                date_from = gap['from']
+                date_to = gap['to']
+                _LOGGER.info (f"{_LABEL}: requesting missing data for {cups[-4:]} from {date_from} to {date_to}")
+                # request supplies
+                self._update_supplies ()
+                supply_found = False
+                for supply in self.data['supplies']:
+                    supply_found = True
+                    start_in_range = supply['date_start'] <= date_from <= supply['date_end']
+                    end_in_range = supply['date_start'] <= date_to <= supply['date_end']
+                    if cups == supply['cups']:
+                        if (start_in_range or end_in_range):
+                            _LOGGER.info (f"{_LABEL}: found a valid supply for CUPS {cups[-4:]} with range from {supply['date_start']} to {supply['date_end']}")
+                            # request contracts
+                            self._update_contracts (cups, supply['distributorCode'])
+                            for contract in self.data['contracts']:
+                                start_in_range = contract['date_start'] <= date_from <= contract['date_end']
+                                end_in_range = contract['date_start'] <= date_to <= contract['date_end']
+                                if (contract['distributorCode'] == supply['distributorCode']) and (start_in_range or end_in_range):
+                                    # request consumptions
+                                    _LOGGER.info (f"{_LABEL}: found a valid contract for CUPS {cups[-4:]} with range from {contract['date_start']} to {contract['date_end']}")
+                                    p_date_start = max ([date_from, supply['date_start'], contract['date_start']])
+                                    p_date_end = min ([date_to, supply['date_end'], contract['date_end']])
+                                    _LOGGER.info (f"{_LABEL}: fetching consumptions from {p_date_start} to {p_date_end}")
+                                    self._update_consumptions (cups,  supply["distributorCode"],  p_date_start,  p_date_end,  "0", supply['pointType'])
+                                    # request maximeter
+                                    m_date_start = max ([date_from, supply['date_start'], contract['date_start']]) + relativedelta(months=1)
+                                    m_date_end = min ([date_to, supply['date_end'], contract['date_end']])
+                                    if m_date_end > m_date_start:
+                                        _LOGGER.info (f"{_LABEL}: fetching maximeter from {m_date_start} to {m_date_end}")
+                                        self._update_maximeter (cups, supply["distributorCode"], m_date_start, m_date_end)
                                     else:
-                                        self.status['maximeter'] = False
-                                        _LOGGER.info (f"{_LABEL}: maximeter data was not updated")
-                                else:
-                                    _LOGGER.info (f"{_LABEL}: ignoring maximeter update for current contract (there is no need to update data / negative delta)")
-                                
-            if not supply_found and (len (self.data['supplies']) > 0):
-                _LOGGER.warning (f"CUPS {cups[-4:]} not found in {self.data['supplies']}, it might be wrong, please check")
-            elif not supply_found:
-                _LOGGER.warning (f"CUPS {cups[-4:]} not found in {self.data['supplies']} because list is empty")
+                                        _LOGGER.info (f"{_LABEL}: ignoring maximeter update for current contract (there is no need to update data / negative delta)")
+                                    
+                if not supply_found and (len (self.data['supplies']) > 0):
+                    _LOGGER.warning (f"CUPS {cups[-4:]} not found in {self.data['supplies']}, it might be wrong, please check")
+                elif not supply_found:
+                    _LOGGER.warning (f"CUPS {cups[-4:]} not found in {self.data['supplies']} because list is empty")
         else:
             _LOGGER.debug ('ignoring update request due to update interval limit')
         _LOGGER.info (f"{_LABEL}: update report {self.status}")
         return is_updated
+
+    def _update_supplies (self):
+        supplies = self.get_supplies () if (datetime.today().date() != self.last_update['supplies'].date()) or (len (self.data['supplies']) == 0) else []
+        if len (supplies) > 0:
+            self.status['supplies'] = True
+            self.data['supplies'] = supplies
+            self.last_update['supplies'] = datetime.now()
+            _LOGGER.info (f"{_LABEL}: supplies data has been successfully updated ({len(supplies)} elements)")
+        else:
+            self.status['supplies'] = False
+            _LOGGER.debug (f"{_LABEL}: supplies data was not updated")
+
+    def _update_contracts (self, cups, distributorCode, authorizedNif=None):
+        contracts = self.get_contract_detail (cups, distributorCode) if (datetime.today().date() != self.last_update['contracts'].date()) or (len (self.data['contracts']) == 0) else []
+        if len (contracts) > 0:
+            self.status['contracts'] = True
+            self.data['contracts'] = du.extend_by_key (self.data['contracts'], contracts, 'date_start')
+            self.last_update['contracts'] = datetime.now()
+            _LOGGER.info (f"{_LABEL}: contracts data has been successfully updated ({len(contracts)} elements)")
+        else:
+            self.status['contracts'] = False
+            _LOGGER.debug (f"{_LABEL}: contracts data was not updated")
+
+    def _update_consumptions (self, cups, distributorCode, startDate, endDate, measurementType, pointType, authorizedNif=None):
+        r = self.get_consumption_data (cups, distributorCode, startDate, endDate, measurementType, pointType, authorizedNif=None)
+        if len (r) > 0:
+            self.status['consumptions'] = True
+            self.data['consumptions'] = du.extend_by_key (self.data['consumptions'], r, 'datetime')
+            self.last_update['consumptions'] = datetime.now()
+            _LOGGER.info (f"{_LABEL}: consumptions data has been successfully updated ({len(r)} elements)")
+        else:
+            self.status['consumptions'] = False
+            _LOGGER.debug (f"{_LABEL}: consumptions data was not updated")
+
+    def _update_maximeter (self, cups, distributorCode, startDate, endDate, authorizedNif=None):
+        r = self.get_max_power (cups, distributorCode, startDate, endDate)
+        if len (r) > 0:
+            self.status['maximeter'] = True
+            self.data['maximeter'] = du.extend_by_key (self.data['maximeter'], r, 'datetime')
+            self.last_update['maximeter'] = datetime.now()
+            _LOGGER.info (f"{_LABEL}: maximeter data has been successfully updated ({len(r)} elements)")
+        else:
+            self.status['maximeter'] = False
+            _LOGGER.debug (f"{_LABEL}: maximeter data was not updated")
 
     def get_supplies (self, authorizedNif=None):
         data = {}
@@ -291,3 +280,31 @@ class DatadisConnector ():
             else:
                 _LOGGER.warning (f'{_LABEL}: weird data structure while fetching maximeter data, got {r}')
         return c
+
+class EsiosConnector ():
+    
+    UPDATE_INTERVAL = timedelta(hours=24)
+    _LABEL = 'EsiosConnector'
+    _last_try = datetime(1970, 1, 1)
+    
+    def __init__ (self, local_timezone='Europe/Madrid', data={'pvpc': []}, log_level=logging.WARNING):
+        logging.getLogger().setLevel(log_level)
+        logging.getLogger("aiopvpc").setLevel(logging.ERROR)
+        self._local_timezone = local_timezone
+        self._handler = PVPCData(tariff=TARIFFS[0], local_timezone=self._local_timezone)
+        self.data = data
+
+    def update (self, date_from, date_to):
+        if (datetime.now() - self._last_try) > self.UPDATE_INTERVAL:
+            self.data['pvpc'], missing = du.extract_dt_ranges (self.data['pvpc'], date_from, date_to, gap_interval=timedelta(hours=1))
+            for gap in missing:
+                raw = self._handler.download_prices_for_range(gap['from'], gap['to'])
+                pvpc = [
+                    {
+                        'datetime': datetime.strptime(x.astimezone(tz.timezone(self._local_timezone)).strftime('%Y-%m-%d %H:%M'), '%Y-%m-%d %H:%M'), 
+                        'price': raw[x]
+                    } for x in raw
+                ]
+                self.data['pvpc'] = du.extend_by_key (self.data['pvpc'], pvpc, 'datetime')
+        else:
+            _LOGGER.debug (f'{self._LABEL}: ignoring update request due to update interval limit')
