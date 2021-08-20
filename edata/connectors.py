@@ -116,6 +116,7 @@ class DatadisConnector ():
             
         _LOGGER.info (f"{_LABEL}: update requested for CUPS {cups[-4:]} from {date_from} to {date_to}")
         is_updated = False
+        new_day = (datetime.now() - self._last_try).days > 0
         if (datetime.now() - self._last_try) > self.UPDATE_INTERVAL:
             is_updated = True
             self._last_try = datetime.now()
@@ -125,7 +126,7 @@ class DatadisConnector ():
             date_to = date_to
             _LOGGER.info (f"{_LABEL}: requesting missing data for {cups[-4:]} from {date_from} to {date_to}")
             # request supplies
-            supplies = self.get_supplies ()
+            supplies = self.get_supplies () if new_day or (len (self.data['supplies']) == 0) else []
             if len (supplies) > 0:
                 self.status['supplies'] = True
                 self.data['supplies'] = supplies
@@ -142,7 +143,7 @@ class DatadisConnector ():
                     if (start_in_range or end_in_range):
                         _LOGGER.info (f"{_LABEL}: found a valid supply for CUPS {cups[-4:]} with range from {supply['date_start']} to {supply['date_end']}")
                         # request contracts
-                        contracts = self.get_contract_detail (cups, supply['distributorCode'])
+                        contracts = self.get_contract_detail (cups, supply['distributorCode']) if new_day or (len (self.data['contracts']) == 0) else []
                         if len (contracts) > 0:
                             self.status['contracts'] = True
                             self.data['contracts'] = update_dictlist(self.data['contracts'], contracts, 'date_start')
