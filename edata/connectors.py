@@ -116,7 +116,7 @@ class DatadisConnector ():
             
         _LOGGER.info (f"{_LABEL}: update requested for CUPS {cups[-4:]} from {date_from} to {date_to}")
         is_updated = False
-        new_day = (datetime.now() - self._last_try).days > 0
+        new_day = datetime.now().day != self._last_try.day
         if (datetime.now() - self._last_try) > self.UPDATE_INTERVAL:
             is_updated = True
             self._last_try = datetime.now()
