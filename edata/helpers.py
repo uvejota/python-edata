@@ -68,7 +68,7 @@ class ReportHelper ():
         else:
             raise PlatformError (f'platform {platform} not supported, valid options are {PLATFORMS}')
 
-        self._last_update = datetime (1970, 1, 1)
+        self.last_update = datetime (1970, 1, 1)
         if self._experimental:
             self._pvpc = PVPCData(tariff=TARIFFS[0], local_timezone='Europe/Madrid')
 
@@ -79,7 +79,7 @@ class ReportHelper ():
     async def async_update (self):
 
         if self._experimental:
-            if datetime.now().day != self._last_update.day:
+            if datetime.now().day != self.last_update.day:
                 self._pvpc_raw = await self._pvpc.async_download_prices_for_range(
                     datetime (datetime.today ().year, datetime.today ().month, 1, 0, 0, 0) - relativedelta(months=1), datetime.today())
 
@@ -96,7 +96,7 @@ class ReportHelper ():
             ) - relativedelta (months=12)
         date_to = datetime.today()
         if self.update_data (self._cups, date_from, date_to):
-            self._last_update = datetime.now()
+            self.last_update = datetime.now()
             self.data = self._conn.data
             self.status = self._conn.status
             self.process_data ()
@@ -180,7 +180,7 @@ class ReportHelper ():
             self.attributes["last_month_p2_kWh"] = p.get('p2_kWh', None)
             self.attributes["last_month_p3_kWh"] = p.get('p3_kWh', None)
             if self._experimental:
-                self.attributes["*last_month_idle_W"] = p.get('idle_avg_W', None)
+                self.attributes["last_month_idle_W"] = p.get('idle_avg_W', None)
 
     def process_maximeter (self):
         date_from = datetime (
@@ -205,9 +205,9 @@ class ReportHelper ():
             self.cured_pvpc = [{'datetime': datetime.strptime(x.astimezone(tz.timezone(timezone)).strftime('%Y-%m-%d %H:%M'), '%Y-%m-%d %H:%M'), 'price': self._pvpc_raw[x]} for x in self._pvpc_raw]
             processor = BillingProcessor (self.data['consumptions'], self.data['contracts'], self.cured_pvpc)
             p = processor.process_range (month_starts, datetime.today())
-            self.attributes['*month_pvpc_€'] = p.get('total', None)
+            self.attributes['month_pvpc_€'] = p.get('total', None)
             p = processor.process_range (month_starts - relativedelta (months=1), month_starts)
-            self.attributes['*last_month_pvpc_€'] = p.get('total', None)
+            self.attributes['last_month_pvpc_€'] = p.get('total', None)
 
     def __str__(self) -> str:
         return '\n'.join([f'{i}: {self.attributes[i]}' for i in self.attributes])
