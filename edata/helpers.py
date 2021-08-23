@@ -25,20 +25,22 @@ ATTRIBUTES = {
     "month_p1_kWh": 'kWh',
     "month_p2_kWh": 'kWh',
     "month_p3_kWh": 'kWh',
-    "*month_pvpc_€": '€',
+    "month_pvpc_€": '€',
     "last_month_kWh": 'kWh',
     "last_month_daily_kWh": 'kWh',
     "last_month_days_kWh": 'd',
     "last_month_p1_kWh": 'kWh',
     "last_month_p2_kWh": 'kWh',
     "last_month_p3_kWh": 'kWh',
-    "*last_month_pvpc_€": '€',
-    "*last_month_idle_W": 'W',
+    "last_month_pvpc_€": '€',
+    "last_month_idle_W": 'W',
     "max_power_kW": 'kW',
     "max_power_date": None,
     "max_power_mean_kW": 'kW',
     "max_power_90perc_kW": 'kW'
 }
+
+EXPERIMENTAL_ATTRS = ['month_pvpc_€', 'last_month_pvpc_€', 'last_month_idle_W']
 
 class PlatformError(Exception):
 
@@ -71,13 +73,13 @@ class ReportHelper ():
             self._pvpc = PVPCData(tariff=TARIFFS[0], local_timezone='Europe/Madrid')
 
         for x in ATTRIBUTES:
-            if self._experimental or not x.startswith("*"):
+            if self._experimental or x not in EXPERIMENTAL_ATTRS:
                 self.attributes[x] = None
 
     async def async_update (self):
 
         if self._experimental:
-            if (datetime.now() - self._last_update).days > 1:
+            if datetime.now().day != self._last_update.day:
                 self._pvpc_raw = await self._pvpc.async_download_prices_for_range(
                     datetime (datetime.today ().year, datetime.today ().month, 1, 0, 0, 0) - relativedelta(months=1), datetime.today())
 
@@ -94,6 +96,7 @@ class ReportHelper ():
             ) - relativedelta (months=12)
         date_to = datetime.today()
         if self.update_data (self._cups, date_from, date_to):
+            self._last_update = datetime.now()
             self.data = self._conn.data
             self.status = self._conn.status
             self.process_data ()
