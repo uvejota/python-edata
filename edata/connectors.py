@@ -19,7 +19,7 @@ class DatadisConnector ():
     _pwd = None
     _session = None
 
-    _last_try = datetime(1970, 1, 1)
+    _last_try = datetime(1970, 1, 1)    
 
     def __init__(self, username, password, log_level=logging.WARNING):
         logging.getLogger().setLevel(log_level)
@@ -37,6 +37,12 @@ class DatadisConnector ():
             'contracts': False,
             'consumptions': False,
             'maximeter': False
+        }
+        self.last_update = {
+            'supplies': datetime(1970, 1, 1),
+            'contracts': datetime(1970, 1, 1),
+            'consumptions': datetime(1970, 1, 1),
+            'maximeter': datetime(1970, 1, 1)
         }
 
     def _get_token (self):
@@ -116,7 +122,6 @@ class DatadisConnector ():
             
         _LOGGER.info (f"{_LABEL}: update requested for CUPS {cups[-4:]} from {date_from} to {date_to}")
         is_updated = False
-        new_day = datetime.now().day != self._last_try.day
         if (datetime.now() - self._last_try) > self.UPDATE_INTERVAL:
             is_updated = True
             self._last_try = datetime.now()
@@ -126,10 +131,11 @@ class DatadisConnector ():
             date_to = date_to
             _LOGGER.info (f"{_LABEL}: requesting missing data for {cups[-4:]} from {date_from} to {date_to}")
             # request supplies
-            supplies = self.get_supplies () if new_day or (len (self.data['supplies']) == 0) else []
+            supplies = self.get_supplies () if (datetime.today().date() != self.last_update['supplies'].date()) or (len (self.data['supplies']) == 0) else []
             if len (supplies) > 0:
                 self.status['supplies'] = True
                 self.data['supplies'] = supplies
+                self.last_update['supplies'] = datetime.now()
                 _LOGGER.info (f"{_LABEL}: supplies data has been successfully updated ({len(supplies)} elements)")
             else:
                 self.status['supplies'] = False
@@ -143,10 +149,11 @@ class DatadisConnector ():
                     if (start_in_range or end_in_range):
                         _LOGGER.info (f"{_LABEL}: found a valid supply for CUPS {cups[-4:]} with range from {supply['date_start']} to {supply['date_end']}")
                         # request contracts
-                        contracts = self.get_contract_detail (cups, supply['distributorCode']) if new_day or (len (self.data['contracts']) == 0) else []
+                        contracts = self.get_contract_detail (cups, supply['distributorCode']) if (datetime.today().date() != self.last_update['contracts'].date()) or (len (self.data['contracts']) == 0) else []
                         if len (contracts) > 0:
                             self.status['contracts'] = True
                             self.data['contracts'] = update_dictlist(self.data['contracts'], contracts, 'date_start')
+                            self.last_update['contracts'] = datetime.now()
                             _LOGGER.info (f"{_LABEL}: contracts data has been successfully updated ({len(contracts)} elements)")
                         else:
                             self.status['contracts'] = False
@@ -164,6 +171,7 @@ class DatadisConnector ():
                                 if len (r) > 0:
                                     self.status['consumptions'] = True
                                     self.data['consumptions'] = update_dictlist(self.data['consumptions'], r, 'datetime')
+                                    self.last_update['consumptions'] = datetime.now()
                                     _LOGGER.info (f"{_LABEL}: consumptions data has been successfully updated ({len(r)} elements)")
                                 else:
                                     self.status['consumptions'] = False
@@ -177,6 +185,7 @@ class DatadisConnector ():
                                     if len (r) > 0:
                                         self.status['maximeter'] = True
                                         self.data['maximeter'] = update_dictlist(self.data['maximeter'], r, 'datetime')
+                                        self.last_update['maximeter'] = datetime.now()
                                         _LOGGER.info (f"{_LABEL}: maximeter data has been successfully updated ({len(r)} elements)")
                                     else:
                                         self.status['maximeter'] = False
