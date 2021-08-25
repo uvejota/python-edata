@@ -9,7 +9,7 @@ HOURS_P1 = [10, 11, 12, 13, 18, 19, 20, 21]
 HOURS_P2 = [8, 9, 14, 15, 16, 17, 22, 23]
 WEEKDAYS_P3 = [5, 6]
 
-class CommonProcessor:
+class DataUtils:
     """A collection of static methods to process datasets"""
     
     @staticmethod
@@ -17,9 +17,45 @@ class CommonProcessor:
         return len(lst) == 0
 
     @staticmethod
-    def extract_dt_range (lst, dt_from, dt_to):
-        df = pd.DataFrame(lst)
-        return df.loc[(pd.to_datetime(dt_from) <= df['datetime']) & (df['datetime'] < pd.to_datetime(dt_to))].to_dict('records')
+    def extract_dt_ranges (lst, dt_from, dt_to, gap_interval=timedelta(hours=1)):
+        new_lst = []
+        missing = []
+        oldest_dt = None
+        newest_dt = None
+        last_dt = None
+        if len(lst) > 0: 
+            sorted_lst = sorted(lst, key = lambda i: i['datetime'])
+            last_dt = sorted_lst[0]['datetime']
+            for i in sorted_lst:
+                if (dt_from <= i['datetime'] <= dt_to):
+                    if (i['datetime'] - last_dt) > gap_interval:
+                        missing.append ({'from': last_dt, 'to': i['datetime']})
+                    if i.get('value_kWh', 1) > 0:
+                        if oldest_dt is None or i['datetime'] < oldest_dt:
+                            oldest_dt = i['datetime']
+                        if newest_dt is None or i['datetime'] > newest_dt:
+                            newest_dt = i['datetime']
+                    new_lst.append(i)
+                    last_dt = i['datetime']
+            if dt_to > last_dt:
+                missing.append ({'from': last_dt, 'to': dt_to})
+            _LOGGER.debug (f'found data from {oldest_dt} to {newest_dt}')
+        else:
+            missing.append ({'from': dt_from, 'to': dt_to})
+        return new_lst, missing
+
+    def extend_by_key (old_lst, new_lst, key):
+        lst = old_lst
+        nn = []
+        for n in new_lst:
+            for o in lst:
+                if n[key] == o[key]:
+                    o = n
+                    break
+            else:
+                nn.append (n)
+        lst.extend(nn)
+        return lst
 
     @staticmethod
     def export_as_csv (lst, dest_file):
