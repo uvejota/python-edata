@@ -1,6 +1,7 @@
 import pandas as pd
 import logging
 from datetime import datetime, timedelta
+from copy import deepcopy
 
 _LOGGER = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -45,12 +46,13 @@ class DataUtils:
         return new_lst, missing
 
     def extend_by_key (old_lst, new_lst, key):
-        lst = old_lst
+        lst = deepcopy(old_lst)
         nn = []
         for n in new_lst:
             for o in lst:
                 if n[key] == o[key]:
-                    o = n
+                    for key in o:
+                        o[key] = n[key]
                     break
             else:
                 nn.append (n)
