@@ -26,7 +26,7 @@ class DataUtils:
         last_dt = None
         if len(lst) > 0: 
             sorted_lst = sorted(lst, key = lambda i: i['datetime'])
-            last_dt = sorted_lst[0]['datetime']
+            last_dt = dt_from
             for i in sorted_lst:
                 if (dt_from <= i['datetime'] <= dt_to):
                     if (i['datetime'] - last_dt) > gap_interval:
@@ -36,8 +36,9 @@ class DataUtils:
                             oldest_dt = i['datetime']
                         if newest_dt is None or i['datetime'] > newest_dt:
                             newest_dt = i['datetime']
-                    new_lst.append(i)
-                    last_dt = i['datetime']
+                    if (i['datetime'] != last_dt): #remove duplicates
+                        new_lst.append(i)
+                        last_dt = i['datetime']
             if dt_to > last_dt:
                 missing.append ({'from': last_dt, 'to': dt_to})
             _LOGGER.debug (f'found data from {oldest_dt} to {newest_dt}')
@@ -51,8 +52,8 @@ class DataUtils:
         for n in new_lst:
             for o in lst:
                 if n[key] == o[key]:
-                    for key in o:
-                        o[key] = n[key]
+                    for i in o:
+                        o[i] = n[i]
                     break
             else:
                 nn.append (n)
