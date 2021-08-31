@@ -48,20 +48,15 @@ class PlatformError(Exception):
     def __str__(self) -> str:
         return f'{self.message}'
 
-class ReportHelper ():
+class EdataHelper ():
 
-    attributes = {}
-    status = {}
-
-    def __init__(self, platform, username, password, cups, data={'supplies': [], 'contracts': [], 'consumptions': [], 'maximeter': [], 'pvpc': []}, storage_dir=False, experimental=False, log_level=logging.WARNING) -> None:
+    def __init__(self, platform, username, password, cups, data={'supplies': [], 'contracts': [], 'consumptions': [], 'maximeter': [], 'pvpc': []}, experimental=False, log_level=logging.WARNING) -> None:
         self._cups = cups
         self._experimental = experimental
-        self._storage_dir = storage_dir
         self.data = data
+        self.attributes = {}
+        self.status = {}
         logging.getLogger().setLevel(log_level)
-
-        if storage_dir and isinstance(storage_dir, str):
-            self.load_data (where=storage_dir)
 
         if platform == 'datadis':
             self._datadis = DatadisConnector (username, password, data={ key: self.data[key] for key in ['supplies', 'contracts', 'consumptions', 'maximeter'] }, log_level=log_level)
@@ -75,22 +70,6 @@ class ReportHelper ():
         for x in ATTRIBUTES:
             if self._experimental or x not in EXPERIMENTAL_ATTRS:
                 self.attributes[x] = None
-
-    def save_data (self, where):
-        try:
-            with open(where+"/edata.dump", "wb") as f:
-                pickle.dump(self.data, f)
-        except Exception as e:
-            _LOGGER.error ('data could not be saved')
-            _LOGGER.exception(e)
-
-    def load_data (self, where):
-        try:
-            with open(where+"/edata.dump", "rb") as f:
-                self.data = pickle.load(f)
-        except Exception as e:
-            _LOGGER.error ('data could not be loaded')
-            _LOGGER.exception(e)
 
     async def async_update (self):
         asyncio.get_event_loop().run_in_executor(None, self.update)
@@ -110,9 +89,6 @@ class ReportHelper ():
             if self._experimental:
                 self.data['pvpc'] = self._pvpc.data['pvpc']
             self.process_data ()
-
-            if self._storage_dir and isinstance(self._storage_dir, str):
-                self.save_data (where=self._storage_dir)
 
     def update_data (self, cups, date_from=None, date_to=None):
         updated = False
@@ -213,7 +189,7 @@ class ReportHelper ():
 
     def process_pvpc (self):
         if self._experimental:
-            if len(self.data['consumptions']) > 0 and len(self.data['maximeter']) > 0 and len(self.data['pvpc']) > 0:
+            if len(self.data['consumptions']) > 0 and len(self.data['contracts']) > 0 and len(self.data['pvpc']) > 0:
                 month_starts = datetime (
                         datetime.today ().year, 
                         datetime.today ().month, 1, 0, 0, 0

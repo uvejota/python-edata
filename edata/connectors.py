@@ -91,7 +91,7 @@ class DatadisConnector ():
         if (datetime.now() - self._last_try) > self.UPDATE_INTERVAL:
             is_updated = True
             self._last_try = datetime.now()
-            self.data['consumptions'], missing = du.extract_dt_ranges (self.data['consumptions'], date_from, date_to, gap_interval=timedelta(hours=24))
+            self.data['consumptions'], missing = du.extract_dt_ranges (self.data['consumptions'], date_from, date_to, gap_interval=timedelta(hours=6))
             _LOGGER.info (f"{_LABEL}: missing data: {missing}")
             for gap in missing:
                 date_from = gap['from']
@@ -246,17 +246,18 @@ class DatadisConnector ():
         r = self._send_cmd("https://datadis.es/api-private/api/get-consumption-data", data=data)
         c = []
         for i in r:
-            if all (k in i for k in ("time", "date", "consumptionKWh", "obtainMethod")):
-                hour = str(int(i['time'].split(':')[0]) - 1) 
-                d = {
-                    'datetime': datetime.strptime (f"{i['date']} {hour.zfill(2)}:00", '%Y/%m/%d %H:%M') ,
-                    'delta_h': 1,
-                    'value_kWh': i['consumptionKWh'] ,
-                    'real': True if i['obtainMethod'] == 'Real' else False
-                }
-                c.append (d)
-            else:
-                _LOGGER.warning (f'{_LABEL}: weird data structure while fetching consumption data, got {r}')
+            if i.get('consumptionKWh', 0) > 0:
+                if all (k in i for k in ("time", "date", "consumptionKWh", "obtainMethod")):
+                    hour = str(int(i['time'].split(':')[0]) - 1) 
+                    d = {
+                        'datetime': datetime.strptime (f"{i['date']} {hour.zfill(2)}:00", '%Y/%m/%d %H:%M') ,
+                        'delta_h': 1,
+                        'value_kWh': i['consumptionKWh'] ,
+                        'real': True if i['obtainMethod'] == 'Real' else False
+                    }
+                    c.append (d)
+                else:
+                    _LOGGER.warning (f'{_LABEL}: weird data structure while fetching consumption data, got {r}')
         return c
 
     def get_max_power (self, cups, distributorCode, startDate, endDate, authorizedNif=None):
