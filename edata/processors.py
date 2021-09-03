@@ -46,6 +46,7 @@ class DataUtils:
             missing.append ({'from': dt_from, 'to': dt_to})
         return new_lst, missing
 
+    @staticmethod
     def extend_by_key (old_lst, new_lst, key):
         lst = deepcopy(old_lst)
         nn = []
@@ -59,6 +60,14 @@ class DataUtils:
                 nn.append (n)
         lst.extend(nn)
         return lst
+
+    @staticmethod
+    def get_by_key (lst, key, value):
+        for i in lst:
+            if i[key] == value:
+                return i
+        else:
+            return False        
 
     @staticmethod
     def export_as_csv (lst, dest_file):
@@ -142,6 +151,7 @@ class ConsumptionProcessor:
             stats['p1_kWh'] = _t['value_kWh'][_t['px']=='p1'].sum()
             stats['p2_kWh'] = _t['value_kWh'][_t['px']=='p2'].sum()
             stats['p3_kWh'] = _t['value_kWh'][_t['px']=='p3'].sum()
+            stats['delta_h'] = _t['delta_h'].sum()
             stats['idle_avg_W'] = 1000*_t['value_kWh'].quantile (0.1)
         return stats
 
