@@ -67,12 +67,15 @@ class Helper ():
 
 class EdataHelper (Helper):
 
+    SCOPE = ['supplies', 'contracts', 'consumptions', 'maximeter', 'pvpc']
+
     def __init__(self, platform, username, password, cups, data=None, experimental=False, log_level=logging.WARNING) -> None:
         super().__init__()
         self._cups = cups
         self._experimental = experimental
         if data is not None:
-            self._data = data
+            for i in [x for x in self.SCOPE if x in data]:
+                self._data[i] = deepcopy(data[i])
         for x in ATTRIBUTES:
             if self._experimental or x not in EXPERIMENTAL_ATTRS:
                 self._attributes[x] = None

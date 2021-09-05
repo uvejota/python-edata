@@ -52,6 +52,7 @@ class Connector ():
         return deepcopy(self._last_update)
 
 class DatadisConnector (Connector):
+    SCOPE = ['supplies', 'contracts', 'consumptions', 'maximeter']
     UPDATE_INTERVAL = timedelta(minutes=60)
     _token = {}
     _usr = None
@@ -66,8 +67,10 @@ class DatadisConnector (Connector):
         self._usr = username
         self._pwd = password
         self._session = requests.Session()
+
         if data is not None:
-            self._data = data
+            for i in [x for x in self.SCOPE if x in data]:
+                self._data[i] = deepcopy(data[i])
 
     def _get_token (self):
         _LOGGER.info (f'{_LABEL}: no token found, fetching a new one...')
@@ -156,20 +159,16 @@ class DatadisConnector (Connector):
                 self._update_consumptions (cups,  dcode,  start,  end,  "0", ptype)
 
             # update maximeter
-            for gap in [x for x in miss_maxim if (c['date_start'] <= x['from'] <= c['date_end']) or (c['date_start'] <= x['to'] <= c['date_end'])]:
-                start = max ([gap['from'], c['date_start']]) + relativedelta(months=1)
-                end = min ([gap['to'], c['date_end']])
-                if end > start:
-                    _LOGGER.info (f"{_LABEL}: fetching maximeter from {start} to {end}")
-                    self._update_maximeter (cups, dcode, start, end)
+            if (c['date_start'] <= date_from <= c['date_end']) or (c['date_start'] <= date_to <= c['date_end']):
+                start = max ([date_from, c['date_start']]) + relativedelta(months=1)
+                end = min ([date_to, c['date_end']])
+                _LOGGER.info (f"{_LABEL}: fetching maximeter from {start} to {end}")
+                self._update_maximeter (cups, dcode, start, end)
 
         # filter consumptions and maximeter, and look for gaps
         self._data['consumptions'], miss_cons = du.extract_dt_ranges (self._data['consumptions'], date_from, date_to, gap_interval=timedelta(hours=6))
         if len(miss_cons) > 1:
             _LOGGER.warning (f"{_LABEL}: still missing the following consumption ranges, gaps will be fulfilled on next update: {miss_cons}")
-        self._data['maximeter'], miss_maxim = du.extract_dt_ranges (self._data['maximeter'], date_from, date_to, gap_interval=timedelta(days=60))
-        if len(miss_maxim) > 1:
-            _LOGGER.warning (f"{_LABEL}: still missing the following maximeter ranges: {miss_maxim}")
 
         return True
 
@@ -207,7 +206,7 @@ class DatadisConnector (Connector):
             _LOGGER.debug (f"{_LABEL}: consumptions data was not updated")
 
     def _update_maximeter (self, cups, distributorCode, startDate, endDate, authorizedNif=None):
-        r = self.get_max_power (cups, distributorCode, startDate, endDate)
+        r = self.get_max_power (cups, distributorCode, startDate, endDate) if (datetime.today().date() != self._last_update['maximeter'].date()) or (len (self._data['maximeter']) == 0) else []
         if len (r) > 0:
             self._status['maximeter'] = True
             self._data['maximeter'] = du.extend_by_key (self._data['maximeter'], r, 'datetime')
@@ -319,7 +318,7 @@ class DatadisConnector (Connector):
         return c
 
 class EsiosConnector (Connector):
-    
+    SCOPE = ['pvpc']
     UPDATE_INTERVAL = timedelta(hours=24)
     _LABEL = 'EsiosConnector'
     _last_try = datetime(1970, 1, 1)
@@ -331,7 +330,8 @@ class EsiosConnector (Connector):
         self._local_timezone = local_timezone
         self._handler = PVPCData(tariff=TARIFFS[0], local_timezone=self._local_timezone)
         if data is not None:
-            self._data = data
+            for i in [x for x in self.SCOPE if x in data]:
+                self._data[i] = deepcopy(data[i])
 
     def update (self, date_from, date_to):
         if (datetime.now() - self._last_try) > self.UPDATE_INTERVAL:

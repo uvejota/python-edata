@@ -2,6 +2,7 @@ import pandas as pd
 import logging
 from datetime import datetime, timedelta
 from copy import deepcopy
+import holidays
 
 _LOGGER = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -84,9 +85,10 @@ class ConsumptionProcessor:
     def preprocess (self, df):
 
         def get_px (dt):
+            hdays = holidays.CountryHoliday('ES')
             hour = dt.hour
             weekday = dt.weekday()
-            if weekday in WEEKDAYS_P3:
+            if weekday in WEEKDAYS_P3 or dt.date() in hdays:
                 return 'p3'
             elif hour in HOURS_P1:
                 return 'p1'
@@ -135,8 +137,7 @@ class ConsumptionProcessor:
             
             _t['datetime'] = _t['datetime'].dt.strftime(date_format)
             _t = _t.round(2)
-            grouped_data = _t.to_dict('records')
-            return grouped_data
+            return _t.to_dict('records')
 
     def process_range (self, dt_from=datetime(1970, 1, 1), dt_to=datetime.now()):
         stats = {}
@@ -151,7 +152,7 @@ class ConsumptionProcessor:
             stats['p1_kWh'] = _t['value_kWh'][_t['px']=='p1'].sum()
             stats['p2_kWh'] = _t['value_kWh'][_t['px']=='p2'].sum()
             stats['p3_kWh'] = _t['value_kWh'][_t['px']=='p3'].sum()
-            stats['delta_h'] = _t['delta_h'].sum()
+            stats['delta_h'] = int(_t['delta_h'].sum())
             stats['idle_avg_W'] = 1000*_t['value_kWh'].quantile (0.1)
         return stats
 
