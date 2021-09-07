@@ -117,10 +117,17 @@ class DatadisConnector (Connector):
                 _LOGGER.error (f'{url + params} returned {r.text} with code {r.status_code}')
         return response
 
+<<<<<<< HEAD
     def update (self, cups, date_from=datetime(1970, 1, 1), date_to=datetime.today()):
         _LOGGER.info (f"{_LABEL}: update requested for CUPS {cups[-4:]} from {date_from} to {date_to}")
 
         if (datetime.now() - self._last_try) < self.UPDATE_INTERVAL:
+=======
+    def update (self, cups, date_from=datetime(1970, 1, 1), date_to=datetime.today(), ignore_interval=False):
+        _LOGGER.info (f"{_LABEL}: update requested for CUPS {cups[-4:]} from {date_from} to {date_to}")
+
+        if not ignore_interval and (datetime.now() - self._last_try) < self.UPDATE_INTERVAL:
+>>>>>>> dev
             _LOGGER.info (f"{_LABEL}: skipping due to update interval")
             return False
         else:
@@ -168,8 +175,17 @@ class DatadisConnector (Connector):
         # filter consumptions and maximeter, and look for gaps
         self._data['consumptions'], miss_cons = du.extract_dt_ranges (self._data['consumptions'], date_from, date_to, gap_interval=timedelta(hours=6))
         if len(miss_cons) > 1:
+<<<<<<< HEAD
             _LOGGER.warning (f"{_LABEL}: still missing the following consumption ranges, gaps will be fulfilled on next update: {miss_cons}")
 
+=======
+            if not ignore_interval:
+                _LOGGER.info (f"{_LABEL}: still missing the following consumption ranges {miss_cons}, retrying...")
+                return self.update (cups, date_from, date_to, ignore_interval=True)
+            else:
+                _LOGGER.warning (f"{_LABEL}: still missing the following consumption ranges {miss_cons}, will try again later")
+                
+>>>>>>> dev
         return True
 
     def _update_supplies (self):

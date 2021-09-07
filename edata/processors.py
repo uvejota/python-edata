@@ -1,3 +1,4 @@
+from abc import ABC, abstractmethod
 import pandas as pd
 import logging
 from datetime import datetime, timedelta
@@ -68,14 +69,18 @@ class DataUtils:
             if i[key] == value:
                 return i
         else:
+<<<<<<< HEAD
             return False        
+=======
+            return {}        
+>>>>>>> dev
 
     @staticmethod
     def export_as_csv (lst, dest_file):
         df = pd.DataFrame(lst)
         df.to_csv(dest_file)
-        
 
+<<<<<<< HEAD
 class ConsumptionProcessor:
     _LABEL = 'ConsumptionProcessor'
     
@@ -102,26 +107,41 @@ class ConsumptionProcessor:
             df['weekday'] = df['datetime'].dt.day_name()
             df['px'] = df['datetime'].apply (get_px)
             self.valid_data = True
+=======
+    @staticmethod
+    def get_pvpc_tariff (a_datetime):
+        hdays = holidays.CountryHoliday('ES')
+        hour = a_datetime.hour
+        weekday = a_datetime.weekday()
+        if weekday in WEEKDAYS_P3 or a_datetime.date() in hdays:
+            return 'p3'
+        elif hour in HOURS_P1:
+            return 'p1'
+        elif hour in HOURS_P2:
+            return 'p2'
+>>>>>>> dev
         else:
-            self.valid_data = False
-            _LOGGER.warning (f'{self._LABEL} wrong data structure')
+            return 'p3'
 
-        return df
+class Processor (ABC):
+    _LABEL = 'Processor'
 
-    def group_by (self, dt_from=datetime(1970, 1, 1), dt_to=datetime.now(), key='M', action='sum'):
+    def __init__ (self, input, settings={}, auto=True):
+        self._input = deepcopy(input)
+        self._settings = settings
+        self._ready = False
+        if auto:
+            self.do_process ()
 
-        if key == 'M':
-            date_format = '%Y-%m'
-        elif key == 'D':
-            date_format = '%Y-%m-%d'
-        else:
-            _LOGGER.error (f'{self._LABEL} {key} is not a valid group_by key parameter')
-            return
+    @abstractmethod
+    def do_process (self):
+        pass
 
-        if action not in ['sum', 'mean']:
-            _LOGGER.error (f'{self._LABEL} {action} is not a valid group_by action parameter')
-            return
+    @property
+    def output (self):
+        return deepcopy(self._output)
 
+<<<<<<< HEAD
         if self.valid_data:
             _df = self.df
             _t = _df.loc[(pd.to_datetime(dt_from) <= _df['datetime']) & (_df['datetime'] < pd.to_datetime(dt_to))].copy ()
@@ -157,34 +177,57 @@ class ConsumptionProcessor:
         return stats
 
 class MaximeterProcessor:
+=======
+class ConsumptionProcessor (Processor):
+    _LABEL = 'ConsumptionProcessor'
+    
+    def do_process (self):
+        self._output = {
+            'hourly': [],
+            'daily': [],
+            'monthly': []
+        }
+        self._df = pd.DataFrame (self._input)
+        if all (k in self._df for k in ("datetime", "value_kWh")):
+            self._df['datetime'] = pd.to_datetime(self._df['datetime'])
+            self._df['weekday'] = self._df['datetime'].dt.day_name()
+            self._df['px'] = self._df['datetime'].apply (DataUtils.get_pvpc_tariff)
+            self._output['hourly'] = self._df.to_dict('records')
+            for opt in [{'date_format': '%Y-%m', 'period': 'M', 'dictkey': 'monthly'}, {'date_format': '%Y-%m-%d', 'period': 'D', 'dictkey': 'daily'}]:
+                _t = self._df.copy ()
+                for p in ['p1', 'p2', 'p3']:
+                    _t['value_'+p+'_kWh'] = _t.loc[_t['px']==p,'value_kWh']
+                _t.drop (['real'], axis=1, inplace=True)
+                _t = _t.groupby ([_t.datetime.dt.to_period(opt['period'])]).sum ()
+                _t.reset_index (inplace=True)
+                _t['datetime'] = _t['datetime'].dt.strftime(opt['date_format'])
+                _t = _t.round(2)
+                self._output[opt['dictkey']] = _t.to_dict('records')
+            self._ready = True
+        else:
+            _LOGGER.warning (f'{self._LABEL} wrong data structure')
+            return False
+
+class MaximeterProcessor (Processor):
+>>>>>>> dev
     _LABEL = 'MaximeterProcessor'
 
-    def __init__(self, lst) -> None:
-        self.df = self.preprocess (pd.DataFrame(lst))
-        
-    def preprocess (self, df):
-        if 'datetime' in df and 'value_kW' in df:
-            df['datetime'] = pd.to_datetime(df['datetime'])
-            self.valid_data = True
+    def do_process (self):
+        self._output = {
+            'stats': {}
+        }
+        self._df = pd.DataFrame (self._input)
+        if all (k in self._df for k in ("datetime", "value_kW")):
+            idx = self._df['value_kW'].argmax ()
+            self._output['stats'] = {
+                'value_max_kW': self._df['value_kW'][idx],
+                'date_max': f"{self._df['datetime'][idx]}",
+                'value_mean_kW': self._df['value_kW'].mean (),
+                'value_tile90_kW': self._df['value_kW'].quantile (0.9)
+            }            
         else:
-            self.valid_data = False
             _LOGGER.warning (f'{self._LABEL} wrong data structure')
-        return df
-
-    def process_range (self, dt_from, dt_to):
-        stats = {}
-        if self.valid_data:
-            _df = self.df
-            _t = _df.loc[(pd.to_datetime(dt_from) <= _df['datetime']) & (_df['datetime'] < pd.to_datetime(dt_to))].copy ()
-            _t = _t.reset_index ()
-            idx = _t['value_kW'].argmax ()
-            stats = {
-                'peak_kW': _t['value_kW'][idx],
-                'peak_date': f"{_t['datetime'][idx]}",
-                'peak_mean_kWh': _t['value_kW'].mean (),
-                'peak_tile90_kWh': _t['value_kW'].quantile (0.9)
-            }
-        return stats
+            return False
 
 class BillingProcessor:
     _LABEL = 'BillingProcessor'
@@ -248,7 +291,9 @@ class BillingProcessor:
         else:
             _LOGGER.warning (f'{self._LABEL} wrong consumptions data structure')
 
-    def process_range (self, dt_from=datetime(1970, 1, 1), dt_to=datetime.now()):
+    def process_range (self, dt_from=None, dt_to=None):
+        dt_from = datetime(1970,1,1) if dt_from is None else dt_from
+        dt_to = datetime.now() if dt_to is None else dt_to
         data = {}
         if self.valid_data:
             _df = self.df
