@@ -69,45 +69,13 @@ class DataUtils:
             if i[key] == value:
                 return i
         else:
-<<<<<<< HEAD
-            return False        
-=======
             return {}        
->>>>>>> dev
 
     @staticmethod
     def export_as_csv (lst, dest_file):
         df = pd.DataFrame(lst)
         df.to_csv(dest_file)
 
-<<<<<<< HEAD
-class ConsumptionProcessor:
-    _LABEL = 'ConsumptionProcessor'
-    
-    def __init__ (self, lst):
-        self.df = self.preprocess (pd.DataFrame(lst))
-
-    def preprocess (self, df):
-
-        def get_px (dt):
-            hdays = holidays.CountryHoliday('ES')
-            hour = dt.hour
-            weekday = dt.weekday()
-            if weekday in WEEKDAYS_P3 or dt.date() in hdays:
-                return 'p3'
-            elif hour in HOURS_P1:
-                return 'p1'
-            elif hour in HOURS_P2:
-                return 'p2'
-            else:
-                return 'p3'
-
-        if 'datetime' in df and 'value_kWh' in df:
-            df['datetime'] = pd.to_datetime(df['datetime'])
-            df['weekday'] = df['datetime'].dt.day_name()
-            df['px'] = df['datetime'].apply (get_px)
-            self.valid_data = True
-=======
     @staticmethod
     def get_pvpc_tariff (a_datetime):
         hdays = holidays.CountryHoliday('ES')
@@ -119,7 +87,6 @@ class ConsumptionProcessor:
             return 'p1'
         elif hour in HOURS_P2:
             return 'p2'
->>>>>>> dev
         else:
             return 'p3'
 
@@ -141,43 +108,6 @@ class Processor (ABC):
     def output (self):
         return deepcopy(self._output)
 
-<<<<<<< HEAD
-        if self.valid_data:
-            _df = self.df
-            _t = _df.loc[(pd.to_datetime(dt_from) <= _df['datetime']) & (_df['datetime'] < pd.to_datetime(dt_to))].copy ()
-            
-            for p in ['p1', 'p2', 'p3']:
-                _t['value_'+p+'_kWh'] = _t.loc[_t['px']==p,'value_kWh']
-            _t.drop (['real'], axis=1, inplace=True)
-            if action == 'sum':
-                _t = _t.groupby ([_t.datetime.dt.to_period(key)]).sum ()
-            elif action == 'mean':
-                _t = _t.groupby ([_t.datetime.dt.to_period(key)]).mean ()
-            _t.reset_index (inplace=True)
-            
-            _t['datetime'] = _t['datetime'].dt.strftime(date_format)
-            _t = _t.round(2)
-            return _t.to_dict('records')
-
-    def process_range (self, dt_from=datetime(1970, 1, 1), dt_to=datetime.now()):
-        stats = {}
-        if self.valid_data:
-            _df = self.df
-            _t = _df.loc[(pd.to_datetime(dt_from) <= _df['datetime']) & (_df['datetime'] < pd.to_datetime(dt_to))].copy ()
-            stats = {
-                'total_kWh': _t['value_kWh'].sum(),
-                'days': _t['value_kWh'].count() / 24.0
-            }
-            stats['daily_kWh'] = stats['total_kWh'] / stats['days'] if stats['days'] > 0 else stats['total_kWh']
-            stats['p1_kWh'] = _t['value_kWh'][_t['px']=='p1'].sum()
-            stats['p2_kWh'] = _t['value_kWh'][_t['px']=='p2'].sum()
-            stats['p3_kWh'] = _t['value_kWh'][_t['px']=='p3'].sum()
-            stats['delta_h'] = int(_t['delta_h'].sum())
-            stats['idle_avg_W'] = 1000*_t['value_kWh'].quantile (0.1)
-        return stats
-
-class MaximeterProcessor:
-=======
 class ConsumptionProcessor (Processor):
     _LABEL = 'ConsumptionProcessor'
     
@@ -209,7 +139,6 @@ class ConsumptionProcessor (Processor):
             return False
 
 class MaximeterProcessor (Processor):
->>>>>>> dev
     _LABEL = 'MaximeterProcessor'
 
     def do_process (self):
