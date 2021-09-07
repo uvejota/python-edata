@@ -1,6 +1,7 @@
 import logging
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
+from pandas.core.tools.datetimes import DatetimeScalarOrArrayConvertible
 from edata.connectors import *
 from edata.processors import *
 import asyncio
@@ -151,7 +152,7 @@ class EdataHelper (Helper):
     def process_consumptions (self):        
 
         if len(self._data['consumptions']) > 0:
-            processor = ConsumptionProcessor (self._data['consumptions'])
+            proc = ConsumptionProcessor (self._data['consumptions'])
 
             today_starts = datetime (
                 datetime.today ().year, 
@@ -159,55 +160,49 @@ class EdataHelper (Helper):
                 datetime.today ().day, 0, 0, 0
             )
 
-            self._data['consumptions_daily_sum'] = processor.group_by (key='D', dt_from=today_starts-timedelta(days=30), action='sum')
-            self._data['consumptions_monthly_sum'] = processor.group_by (key='M', action='sum')
-
-            # update yesterday
-            p = processor.process_range (today_starts-timedelta(days=1), today_starts)
-            self._attributes["yesterday_kWh"] = p.get('total_kWh', None)
-            self._attributes["yesterday_p1_kWh"] = p.get('p1_kWh', None)
-            self._attributes["yesterday_p2_kWh"] = p.get('p2_kWh', None)
-            self._attributes["yesterday_p3_kWh"] = p.get('p3_kWh', None)
-            self._attributes["yesterday_hours"] =  p.get('delta_h', None)
-
-            # update current month
             month_starts = datetime (
                 datetime.today ().year, 
                 datetime.today ().month, 1, 0, 0, 0
             )
 
-            p = processor.process_range (month_starts, month_starts + relativedelta(months=1))
-            self._attributes["month_kWh"] = p.get('total_kWh', None)
-            self._attributes["month_days"] = p.get('days', None)
-            self._attributes["month_daily_kWh"] = p.get('daily_kWh', None)
-            self._attributes["month_p1_kWh"] = p.get('p1_kWh', None)
-            self._attributes["month_p2_kWh"] = p.get('p2_kWh', None)
-            self._attributes["month_p3_kWh"] = p.get('p3_kWh', None)
+            #hourly = proc.output['hourly']
+            daily = proc.output['daily']
+            monthly = proc.output['monthly']
 
-            # update last month
-            p = processor.process_range (month_starts - relativedelta (months=1), month_starts)
-            self._attributes["last_month_kWh"] = p.get('total_kWh', None)
-            self._attributes["last_month_days"] = p.get('days', None)
-            self._attributes["last_month_daily_kWh"] = p.get('daily_kWh', None)
-            self._attributes["last_month_p1_kWh"] = p.get('p1_kWh', None)
-            self._attributes["last_month_p2_kWh"] = p.get('p2_kWh', None)
-            self._attributes["last_month_p3_kWh"] = p.get('p3_kWh', None)
-            if self._experimental:
-                self._attributes["last_month_idle_W"] = p.get('idle_avg_W', None)
+            self._data['consumptions_daily_sum'] = daily
+            self._data['consumptions_monthly_sum'] = monthly
+
+            yday = DataUtils.get_by_key (daily, 'datetime', (today_starts.date() - timedelta (days=1)).strftime ("%Y-%m-%d"))
+            self._attributes["yesterday_kWh"] = yday.get('value_kWh', None)
+            self._attributes["yesterday_p1_kWh"] = yday.get('value_p1_kWh', None)
+            self._attributes["yesterday_p2_kWh"] = yday.get('value_p2_kWh', None)
+            self._attributes["yesterday_p3_kWh"] = yday.get('value_p3_kWh', None)
+            self._attributes["yesterday_hours"] =  yday.get('delta_h', None)
+
+            month = DataUtils.get_by_key (monthly, 'datetime', month_starts.strftime ("%Y-%m"))
+            self._attributes["month_kWh"] = month.get('value_kWh', None)
+            self._attributes["month_days"] = month.get('delta_h', 0) / 24
+            self._attributes["month_daily_kWh"] = (self._attributes["month_kWh"] / self._attributes["month_days"]) if self._attributes["month_days"] > 0 else 0
+            self._attributes["month_p1_kWh"] = month.get('value_p1_kWh', None)
+            self._attributes["month_p2_kWh"] = month.get('value_p2_kWh', None)
+            self._attributes["month_p3_kWh"] = month.get('value_p3_kWh', None)
+
+            last_month = DataUtils.get_by_key (monthly, 'datetime', (month_starts - relativedelta (months=1)).strftime ("%Y-%m"))
+            self._attributes["last_month_kWh"] = last_month.get('value_kWh', None)
+            self._attributes["last_month_days"] = last_month.get('delta_h', 0) / 24
+            self._attributes["last_month_daily_kWh"] = (self._attributes["last_month_kWh"] / self._attributes["last_month_days"]) if self._attributes["last_month_days"] > 0 else 0
+            self._attributes["last_month_p1_kWh"] = last_month.get('value_p1_kWh', None)
+            self._attributes["last_month_p2_kWh"] = last_month.get('value_p2_kWh', None)
+            self._attributes["last_month_p3_kWh"] = last_month.get('value_p3_kWh', None)
 
     def process_maximeter (self):
         if len(self._data['maximeter']) > 0:
-            date_from = datetime (
-                    datetime.today ().year, 
-                    datetime.today ().month, 
-                    1, 0, 0, 0
-                ) - relativedelta (months=12)
             processor = MaximeterProcessor (self._data['maximeter'])
-            p = processor.process_range (date_from, datetime.today())
-            self._attributes['max_power_kW'] = p.get('peak_kW', None)
-            self._attributes['max_power_date'] = p.get('peak_date', None)
-            self._attributes['max_power_mean_kW'] = p.get('peak_mean_kWh', None)
-            self._attributes['max_power_90perc_kW'] = p.get('peak_tile90_kWh', None)
+            last_relative_year = processor.output['stats']
+            self._attributes['max_power_kW'] = last_relative_year.get('value_max_kW', None)
+            self._attributes['max_power_date'] = last_relative_year.get('date_max', None)
+            self._attributes['max_power_mean_kW'] = last_relative_year.get('value_mean_kW', None)
+            self._attributes['max_power_90perc_kW'] = last_relative_year.get('value_tile90_kW', None)
 
     def process_pvpc (self):
         if self._experimental:
