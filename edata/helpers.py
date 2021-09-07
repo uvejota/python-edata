@@ -33,14 +33,14 @@ ATTRIBUTES = {
     "last_month_p2_kWh": 'kWh',
     "last_month_p3_kWh": 'kWh',
     "last_month_pvpc_€": '€',
-    "last_month_idle_W": 'W',
+    #"last_month_idle_W": 'W',
     "max_power_kW": 'kW',
     "max_power_date": None,
     "max_power_mean_kW": 'kW',
     "max_power_90perc_kW": 'kW'
 }
 
-EXPERIMENTAL_ATTRS = ['month_pvpc_€', 'last_month_pvpc_€', 'last_month_idle_W']
+EXPERIMENTAL_ATTRS = ['month_pvpc_€', 'last_month_pvpc_€']
 
 class PlatformError(Exception):
 
