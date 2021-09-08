@@ -152,14 +152,14 @@ class DatadisConnector (Connector):
 
         for c in self._data['contracts']:
             # update consumptions
-            for gap in [x for x in miss_cons if (c['date_start'] <= x['from'] <= c['date_end']) or (c['date_start'] <= x['to'] <= c['date_end'])]:
+            for gap in [x for x in miss_cons if not (x['to'] < c['date_start'] or x['from'] > c['date_end'])]:
                 start = max ([gap['from'], c['date_start']])
                 end = min ([gap['to'], c['date_end']])
                 _LOGGER.info (f"{_LABEL}: fetching consumptions from {start} to {end}")
                 self._update_consumptions (cups,  dcode,  start,  end,  "0", ptype)
 
             # update maximeter
-            if (c['date_start'] <= date_from <= c['date_end']) or (c['date_start'] <= date_to <= c['date_end']):
+            if (not (date_to < c['date_start'] or date_from > c['date_end'])):
                 start = max ([date_from, c['date_start']]) + relativedelta(months=1)
                 end = min ([date_to, c['date_end']])
                 _LOGGER.info (f"{_LABEL}: fetching maximeter from {start} to {end}")
