@@ -37,10 +37,11 @@ ATTRIBUTES = {
     "max_power_kW": 'kW',
     "max_power_date": None,
     "max_power_mean_kW": 'kW',
-    "max_power_90perc_kW": 'kW'
+    "max_power_90perc_kW": 'kW',
+    "last_registered_kWh_date": None
 }
 
-EXPERIMENTAL_ATTRS = ['month_pvpc_€', 'last_month_pvpc_€']
+EXPERIMENTAL_ATTRS = []
 
 class PlatformError(Exception):
 
@@ -88,8 +89,7 @@ class EdataHelper (Helper):
             raise PlatformError (f'platform {platform} not supported, valid options are {PLATFORMS}')
 
         self.last_update = datetime (1970, 1, 1)
-        if self._experimental:
-            self._pvpc = EsiosConnector (data=self._data, log_level=log_level)
+        self._pvpc = EsiosConnector (data=self._data, log_level=log_level)
 
         for x in ATTRIBUTES:
             if self._experimental or x not in EXPERIMENTAL_ATTRS:
@@ -107,15 +107,14 @@ class EdataHelper (Helper):
             self.last_update = datetime.now()
             for i in ['supplies', 'contracts', 'consumptions', 'maximeter']:
                 self._data[i] = self._datadis.data[i]
-            if self._experimental:
-                self._data['pvpc'] = self._pvpc.data['pvpc']
+            self._data['pvpc'] = self._pvpc.data['pvpc']
             self.process_data ()
 
     def update_data (self, cups, date_from=None, date_to=None):
         updated = False
         try:
             updated = self._datadis.update (cups, date_from, date_to)
-            if updated and self._experimental:
+            if updated:
                 self._pvpc.update(date_from, date_to)
         except Exception as e:
             _LOGGER.error (f"unhandled exception while updating data for CUPS {cups[-4:]}")
@@ -195,6 +194,8 @@ class EdataHelper (Helper):
             self._attributes["last_month_p2_kWh"] = last_month.get('value_p2_kWh', None)
             self._attributes["last_month_p3_kWh"] = last_month.get('value_p3_kWh', None)
 
+            self._attributes["last_registered_kWh_date"] = self._data['consumptions'][-1]['datetime']
+
     def process_maximeter (self):
         if len(self._data['maximeter']) > 0:
             processor = MaximeterProcessor (self._data['maximeter'])
@@ -205,17 +206,16 @@ class EdataHelper (Helper):
             self._attributes['max_power_90perc_kW'] = last_relative_year.get('value_tile90_kW', None)
 
     def process_pvpc (self):
-        if self._experimental:
-            if len(self._data['consumptions']) > 0 and len(self._data['contracts']) > 0 and len(self._data['pvpc']) > 0:
-                month_starts = datetime (
-                        datetime.today ().year, 
-                        datetime.today ().month, 1, 0, 0, 0
-                    )
-                processor = BillingProcessor (self._data['consumptions'], self._data['contracts'], self._data['pvpc'])
-                p = processor.process_range (month_starts, datetime.today())
-                self._attributes['month_pvpc_€'] = p.get('total', None)
-                p = processor.process_range (month_starts - relativedelta (months=1), month_starts)
-                self._attributes['last_month_pvpc_€'] = p.get('total', None)
+        if len(self._data['consumptions']) > 0 and len(self._data['contracts']) > 0 and len(self._data['pvpc']) > 0:
+            month_starts = datetime (
+                    datetime.today ().year, 
+                    datetime.today ().month, 1, 0, 0, 0
+                )
+            processor = BillingProcessor (self._data['consumptions'], self._data['contracts'], self._data['pvpc'])
+            p = processor.process_range (month_starts, datetime.today())
+            self._attributes['month_pvpc_€'] = p.get('total', None)
+            p = processor.process_range (month_starts - relativedelta (months=1), month_starts)
+            self._attributes['last_month_pvpc_€'] = p.get('total', None)
 
     def __str__(self) -> str:
         return '\n'.join([f'{i}: {self._attributes[i]}' for i in self._attributes])
