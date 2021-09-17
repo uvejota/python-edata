@@ -169,9 +169,9 @@ class DatadisConnector (Connector):
                 self._update_maximeter (cups, dcode, start, end)
 
         # safe check periods in non-registered contracts
-        if oldest_contract != s_start and oldest_contract > date_from:
-            _LOGGER.info (f'{self._LABEL}: it seems that oldest contract does not match with supply start date, requesting consumptions update from {max ([date_from, s_start, oldest_contract])} to {oldest_contract}')
-            self._update_consumptions (cups,  dcode,  max ([date_from, s_start, oldest_contract]),  oldest_contract,  "0", ptype)
+        if oldest_contract != s_start and oldest_contract > max ([date_from, s_start]):
+            _LOGGER.warning (f'{self._LABEL}: it seems that oldest contract does not match with supply start date, requesting consumptions update from {max ([date_from, s_start])} to {oldest_contract}')
+            self._update_consumptions (cups,  dcode,  max ([date_from, s_start]),  oldest_contract,  "0", ptype)
 
         # filter consumptions and maximeter, and look for gaps
         self._data['consumptions'], miss_cons = du.extract_dt_ranges (self._data['consumptions'], date_from, date_to, gap_interval=timedelta(hours=6))
