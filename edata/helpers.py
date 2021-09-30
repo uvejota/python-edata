@@ -61,11 +61,11 @@ class Helper ():
 
     @property
     def data (self):
-        return deepcopy(self._data)
+        return self._data
 
     @property
     def attributes (self):
-        return deepcopy(self._attributes)
+        return self._attributes
 
 class EdataHelper (Helper):
 

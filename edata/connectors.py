@@ -40,15 +40,15 @@ class Connector ():
 
     @property
     def data (self):
-        return deepcopy(self._data)
+        return self._data
 
     @property
     def status (self):
-        return deepcopy(self._status)
+        return self._status
 
     @property
     def last_update (self):
-        return deepcopy(self._last_update)
+        return self._last_update
 
 class DatadisConnector (Connector):
     SCOPE = ['supplies', 'contracts', 'consumptions', 'maximeter']
