@@ -86,6 +86,7 @@ class DatadisConnector (Connector):
             is_valid_token = True
         else:
             _LOGGER.error (f'{self._LABEL}: unknown error while retrieving token, got {r.text}')
+            # TODO: identify authentication errors and throw AuthError 
         return is_valid_token
 
     def _send_cmd (self, url, data={}, refresh_token=False):
