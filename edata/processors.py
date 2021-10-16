@@ -4,6 +4,8 @@ import logging
 from datetime import datetime, timedelta
 from copy import deepcopy
 import holidays
+from .const import *
+from .data import *
 
 _LOGGER = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -14,68 +16,6 @@ WEEKDAYS_P3 = [5, 6]
 
 class DataUtils:
     """A collection of static methods to process datasets"""
-    
-    @staticmethod
-    def is_empty (lst):
-        return len(lst) == 0
-
-    @staticmethod
-    def extract_dt_ranges (lst, dt_from, dt_to, gap_interval=timedelta(hours=1)):
-        new_lst = []
-        missing = []
-        oldest_dt = None
-        newest_dt = None
-        last_dt = None
-        if len(lst) > 0: 
-            sorted_lst = sorted(lst, key = lambda i: i['datetime'])
-            last_dt = dt_from
-            for i in sorted_lst:
-                if (dt_from <= i['datetime'] <= dt_to):
-                    if (i['datetime'] - last_dt) > gap_interval:
-                        missing.append ({'from': last_dt, 'to': i['datetime']})
-                    if i.get('value_kWh', 1) > 0:
-                        if oldest_dt is None or i['datetime'] < oldest_dt:
-                            oldest_dt = i['datetime']
-                        if newest_dt is None or i['datetime'] > newest_dt:
-                            newest_dt = i['datetime']
-                    if (i['datetime'] != last_dt): #remove duplicates
-                        new_lst.append(i)
-                        last_dt = i['datetime']
-            if dt_to > last_dt:
-                missing.append ({'from': last_dt, 'to': dt_to})
-            _LOGGER.debug (f'found data from {oldest_dt} to {newest_dt}')
-        else:
-            missing.append ({'from': dt_from, 'to': dt_to})
-        return new_lst, missing
-
-    @staticmethod
-    def extend_by_key (old_lst, new_lst, key):
-        lst = deepcopy(old_lst)
-        nn = []
-        for n in new_lst:
-            for o in lst:
-                if n[key] == o[key]:
-                    for i in o:
-                        o[i] = n[i]
-                    break
-            else:
-                nn.append (n)
-        lst.extend(nn)
-        return lst
-
-    @staticmethod
-    def get_by_key (lst, key, value):
-        for i in lst:
-            if i[key] == value:
-                return i
-        else:
-            return {}        
-
-    @staticmethod
-    def export_as_csv (lst, dest_file):
-        df = pd.DataFrame(lst)
-        df.to_csv(dest_file)
-
     @staticmethod
     def get_pvpc_tariff (a_datetime):
         hdays = holidays.CountryHoliday('ES')
@@ -118,23 +58,24 @@ class ConsumptionProcessor (Processor):
             'monthly': []
         }
         self._df = pd.DataFrame (self._input)
-        if all (k in self._df for k in ("datetime", "value_kWh")):
-            self._df['datetime'] = pd.to_datetime(self._df['datetime'])
-            self._df['weekday'] = self._df['datetime'].dt.day_name()
-            self._df['px'] = self._df['datetime'].apply (DataUtils.get_pvpc_tariff)
-            self._output['hourly'] = self._df.to_dict('records')
-            for opt in [{'date_format': '%Y-%m', 'period': 'M', 'dictkey': 'monthly'}, {'date_format': '%Y-%m-%d', 'period': 'D', 'dictkey': 'daily'}]:
+        if all (k in self._df for k in ("start", "value_kwh")):
+            self._df["start"] = pd.to_datetime(self._df["start"])
+            self._df['weekday'] = self._df["start"].dt.day_name()
+            self._df['tariff'] = self._df["start"].apply (DataUtils.get_pvpc_tariff)
+            self._df.drop (['real', 'end'], axis=1, inplace=True)
+            for opt in [{'period': 'M', 'dictkey': 'monthly'}, {'period': 'D', 'dictkey': 'daily'}]:
                 _t = self._df.copy ()
                 for p in ['p1', 'p2', 'p3']:
-                    _t['value_'+p+'_kWh'] = _t.loc[_t['px']==p,'value_kWh']
-                _t.drop (['real'], axis=1, inplace=True)
-                _t = _t.groupby ([_t.datetime.dt.to_period(opt['period'])]).sum ()
+                    _t['value_'+p+'_kwh'] = _t.loc[_t['tariff']==p,'value_kwh']
+                _t = _t.groupby ([_t.start.dt.to_period(opt['period'])]).sum ()
                 _t.reset_index (inplace=True)
-                _t['datetime'] = _t['datetime'].dt#.strftime(opt['date_format'])
                 _t = _t.round(2)
+                _t["start"] = _t["start"].dt.strftime("%Y-%m-%dT%H:%M:00Z")
                 self._output[opt['dictkey']] = _t.to_dict('records')
             self._ready = True
-        else:
+            self._df["start"] = self._df["start"].dt.strftime("%Y-%m-%dT%H:%M:00Z")
+            self._output['hourly'] = self._df.to_dict('records')
+        elif len(self._df) > 0:
             _LOGGER.warning (f'{self._LABEL} wrong data structure')
             return False
 
@@ -146,93 +87,90 @@ class MaximeterProcessor (Processor):
             'stats': {}
         }
         self._df = pd.DataFrame (self._input)
-        if all (k in self._df for k in ("datetime", "value_kW")):
-            idx = self._df['value_kW'].argmax ()
+        if all (k in self._df for k in ("start", "value_kw")):
+            idx = self._df['value_kw'].argmax ()
             self._output['stats'] = {
-                'value_max_kW': self._df['value_kW'][idx],
-                'date_max': f"{self._df['datetime'][idx]}",
-                'value_mean_kW': self._df['value_kW'].mean (),
-                'value_tile90_kW': self._df['value_kW'].quantile (0.9)
+                'value_max_kw': self._df['value_kw'][idx],
+                'date_max': f"{self._df['start'][idx]}",
+                'value_mean_kw': self._df['value_kw'].mean (),
+                'value_tile90_kw': self._df['value_kw'].quantile (0.9)
             }            
-        else:
+        elif len(self._df) > 0:
             _LOGGER.warning (f'{self._LABEL} wrong data structure')
             return False
 
-class BillingProcessor:
+class BillingProcessor (Processor):
     _LABEL = 'BillingProcessor'
 
     const = {
-        'p1_kw*y': 30.67266, # €/kW/year 
-        'p2_kw*y': 1.4243591, # €/kW/year
+        'p1_kw*y': 30.67266, # €/kw/year 
+        'p2_kw*y': 1.4243591, # €/kw/year
         'meter_m': 0.81, # €/month
-        'market_kw*y': 3.113, # €/kW/año
-        'e_tax': 1.0511300560, # multiplicative
+        'market_kw*y': 3.113, # €/kw/año
+        'electricity_tax': 1.0511300560, # multiplicative
         'iva_tax': 1.1 # multiplicative
     }
 
-    def __init__ (self, consumptions_lst, contracts_lst, prices_lst, const={}):
-        self.preprocess (consumptions_lst, contracts_lst, prices_lst)
-        for i in const:
-            self.const[i] = const[i]
-
-    def preprocess (self, consumptions_lst, contracts_lst, prices_lst):
-        self.valid_data = False
-        c_df = pd.DataFrame (consumptions_lst)
-        if all (k in c_df for k in ("datetime", "value_kWh")):
-            c_df['datetime'] = pd.to_datetime(c_df['datetime'])
+    def do_process (self):
+        self._output = {
+            'hourly': [],
+            'daily': [],
+            'monthly': []
+        }
+        c_df = pd.DataFrame (self._input['consumptions'])
+        if all (k in c_df for k in ("start", "value_kwh")):
+            c_df["start"] = pd.to_datetime(c_df["start"])
             df = c_df
-            p_df = pd.DataFrame (prices_lst)
-            if all (k in p_df for k in ("datetime", "price")):
-                p_df['datetime'] = pd.to_datetime(p_df['datetime'])
-                df = df.merge (p_df, how='left', left_on=['datetime'], right_on=['datetime'])
+            p_df = pd.DataFrame (self._input['energy_costs'])
+            if all (k in p_df for k in ("start", "value_eur")):
+                p_df["start"] = pd.to_datetime(p_df["start"])
+                df = df.merge (p_df, how='left', left_on=["start"], right_on=["start"])
                 c = []
                 try:
-                    for contract in contracts_lst:
-                        start = contract['date_start']
-                        end = contract['date_end']
+                    for contract in self._input['contracts']:
+                        start = contract['start']
+                        end = contract['end']
                         finish = False
                         while not finish:
                             c.append (
                                 {
-                                    'datetime': start,
+                                    "start": start,
                                     'power_p1': contract['power_p1'],
                                     'power_p2': contract['power_p2'] if contract['power_p2'] is not None else contract['power_p1']
                                 }
                             )
                             start = start + timedelta (hours=1)
                             finish = not (end > start)
-                    df = df.merge (pd.DataFrame (c), how='left', left_on=['datetime'], right_on=['datetime'])
-                    df['datetime'] = pd.to_datetime(df['datetime'])
-                    df['e_taxfree'] = df['price'] * df['value_kWh'] 
-                    df['e_wtax'] = df['e_taxfree'] * self.const['e_tax'] * self.const['iva_tax']
+                    df = df.merge (pd.DataFrame (c), how='left', left_on=["start"], right_on=["start"])
+                    df["start"] = pd.to_datetime(df["start"])
+                    df['energy_eur'] = df['value_eur'] * df['value_kwh'] 
                     hprice_p1 = self.const['p1_kw*y'] / 365 / 24
                     hprice_p2 = self.const['p2_kw*y'] / 365 / 24
                     hprice_market = self.const['market_kw*y'] / 365 / 24
-                    df['p_taxfree'] = df['power_p1'] * (hprice_p1 + hprice_market) + df['power_p2'] * hprice_p2 
-                    df['p_wtax'] = df['p_taxfree'] * self.const['e_tax'] * self.const['iva_tax']
-                    self.df = df
-                    self.valid_data = True
+                    df['power_eur'] = df['power_p1'] * (hprice_p1 + hprice_market) + df['power_p2'] * hprice_p2 
+                    df["other_eur"] = self.const["meter_m"] / 30 / 24
+                    df["total_eur"] = (
+                        (
+                            (
+                                df['power_eur'] + df['energy_eur']) * self.const['electricity_tax'] * self.const['iva_tax'] # power + energy terms
+                            ) + (
+                                df["other_eur"] * self.const['iva_tax'] # other (meter) terms
+                                )
+                    )
+                    df["taxes_eur"] = df["total_eur"] - (df['energy_eur'] + df['power_eur'] + df["other_eur"])
+                    self._output['hourly'] = df[["start", "total_eur", "energy_eur", "power_eur", "other_eur", "taxes_eur"]].to_dict('records')
+                    for opt in [{'period': 'M', 'dictkey': 'monthly'}, {'period': 'D', 'dictkey': 'daily'}]:
+                        _t = df.copy ()
+                        _t = _t.groupby ([_t.start.dt.to_period(opt['period'])]).sum ()
+                        _t.reset_index (inplace=True)
+                        _t = _t.round(2)
+                        _t["start"] = _t["start"].dt.strftime("%Y-%m-%dT%H:%M:00Z")
+                        self._output[opt['dictkey']] = _t[["start", "total_eur", "energy_eur", "power_eur", "other_eur", "taxes_eur"]].to_dict('records')
                 except Exception as e:
-                    _LOGGER.warning (f'{self._LABEL} wrong contracts data structure')
-                    _LOGGER.exception (e)
-            else:
+                    _LOGGER.exception (f'{self._LABEL} unhandled exception {e}')
+            elif len(p_df) > 0:
                 _LOGGER.warning (f'{self._LABEL} wrong prices data structure')
-        else:
+        elif len(c_df) > 0:
             _LOGGER.warning (f'{self._LABEL} wrong consumptions data structure')
-
-    def process_range (self, dt_from=None, dt_to=None):
-        dt_from = datetime(1970,1,1) if dt_from is None else dt_from
-        dt_to = datetime.now() if dt_to is None else dt_to
-        data = {}
-        if self.valid_data:
-            _df = self.df
-            _t = _df.loc[(pd.to_datetime(dt_from) <= _df['datetime']) & (_df['datetime'] < pd.to_datetime(dt_to))].copy ()
-            data = {
-                'energy_term': round(_t['e_wtax'].sum(), 2),
-                'power_term': round(_t['p_wtax'].sum(), 2),
-                'other_terms': round(self.const['iva_tax'] * ((dt_to - dt_from).total_seconds() /(24*3600)) * self.const['meter_m'] / 30, 2)
-            }
-            data['total'] = data['energy_term'] + data['power_term'] + data['other_terms']
-        return data
 
         
