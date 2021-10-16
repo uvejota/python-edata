@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-import logging, requests, jwt, time, json
+import logging, requests, jwt, time
 from random import randint
 from dateutil.relativedelta import relativedelta
-from edata.processors import DataUtils as du
 from aiopvpc import PVPCData, TARIFFS
 import pytz as tz
 from datetime import datetime, timedelta
@@ -153,7 +152,7 @@ class DatadisConnector (Connector):
 
         def fill_gaps ():
             # filter consumptions and maximeter, and look for gaps
-            self._data['consumptions'], miss_cons = find_gaps (self._data['consumptions'], max ([date_from, _supply['start']]), date_to, gap_interval=timedelta(hours=6))
+            self._data['consumptions'], miss_cons = find_gaps (self._data['consumptions'], max ([date_from, _supply['start']]), date_to, gap_interval=timedelta(hours=24))
             self._data['maximeter'], miss_maxim = find_gaps (self._data['maximeter'], max ([date_from, _supply['start']]), date_to, gap_interval=timedelta(days=30))
 
             _start_contracts = datetime.today()
@@ -181,7 +180,7 @@ class DatadisConnector (Connector):
 
         fill_gaps ()
         # filter consumptions and maximeter, and look for gaps
-        self._data['consumptions'], miss_cons = find_gaps (self._data['consumptions'], max ([date_from, _supply['start']]), date_to, gap_interval=timedelta(hours=6))
+        self._data['consumptions'], miss_cons = find_gaps (self._data['consumptions'], max ([date_from, _supply['start']]), date_to, gap_interval=timedelta(hours=24))
         self._data['maximeter'], miss_maxim = find_gaps (self._data['maximeter'], max ([date_from, _supply['start']]), date_to, gap_interval=timedelta(days=31))
         # check if some gaps were not satisfied, and retry
         if len(miss_cons) > 1 or len(miss_maxim) > 1:

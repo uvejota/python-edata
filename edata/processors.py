@@ -70,7 +70,10 @@ class ConsumptionProcessor (Processor):
                 _t = _t.groupby ([_t.start.dt.to_period(opt['period'])]).sum ()
                 _t.reset_index (inplace=True)
                 _t = _t.round(2)
-                _t["start"] = _t["start"].dt.strftime("%Y-%m-%dT%H:%M:00Z")
+                if opt["period"] == 'M':
+                    _t["start"] = _t["start"].dt.strftime("%Y-%m-01T00:00:00Z")
+                else:
+                    _t["start"] = _t["start"].dt.strftime("%Y-%m-%dT%H:%M:00Z")
                 self._output[opt['dictkey']] = _t.to_dict('records')
             self._ready = True
             self._df["start"] = self._df["start"].dt.strftime("%Y-%m-%dT%H:%M:00Z")
@@ -84,6 +87,7 @@ class MaximeterProcessor (Processor):
 
     def do_process (self):
         self._output = {
+            'hourly': {},
             'stats': {}
         }
         self._df = pd.DataFrame (self._input)
@@ -95,6 +99,10 @@ class MaximeterProcessor (Processor):
                 'value_mean_kw': self._df['value_kw'].mean (),
                 'value_tile90_kw': self._df['value_kw'].quantile (0.9)
             }            
+            self._df["start"] = self._df["start"].dt.strftime("%Y-%m-%dT%H:%M:00Z")
+            self._df["end"] = self._df["end"].dt.strftime("%Y-%m-%dT%H:%M:00Z")
+            self._df["time"] = self._df["time"].dt.strftime("%Y-%m-%dT%H:%M:00Z")
+            self._output["hourly"] = self._df.to_dict('records') 
         elif len(self._df) > 0:
             _LOGGER.warning (f'{self._LABEL} wrong data structure')
             return False
@@ -158,14 +166,18 @@ class BillingProcessor (Processor):
                                 )
                     )
                     df["taxes_eur"] = df["total_eur"] - (df['energy_eur'] + df['power_eur'] + df["other_eur"])
-                    self._output['hourly'] = df[["start", "total_eur", "energy_eur", "power_eur", "other_eur", "taxes_eur"]].to_dict('records')
                     for opt in [{'period': 'M', 'dictkey': 'monthly'}, {'period': 'D', 'dictkey': 'daily'}]:
                         _t = df.copy ()
                         _t = _t.groupby ([_t.start.dt.to_period(opt['period'])]).sum ()
                         _t.reset_index (inplace=True)
                         _t = _t.round(2)
-                        _t["start"] = _t["start"].dt.strftime("%Y-%m-%dT%H:%M:00Z")
+                        if opt["period"] == 'M':
+                            _t["start"] = _t["start"].dt.strftime("%Y-%m-01T00:00:00Z")
+                        else:
+                            _t["start"] = _t["start"].dt.strftime("%Y-%m-%dT%H:%M:00Z")
                         self._output[opt['dictkey']] = _t[["start", "total_eur", "energy_eur", "power_eur", "other_eur", "taxes_eur"]].to_dict('records')
+                    df["start"] = df["start"].dt.strftime("%Y-%m-%dT%H:%M:00Z")
+                    self._output['hourly'] = df[["start", "total_eur", "energy_eur", "power_eur", "other_eur", "taxes_eur"]].to_dict('records')
                 except Exception as e:
                     _LOGGER.exception (f'{self._LABEL} unhandled exception {e}')
             elif len(p_df) > 0:

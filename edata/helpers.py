@@ -1,11 +1,6 @@
 import logging
-from datetime import datetime, timedelta
-from dateutil.relativedelta import relativedelta
-from pandas.core.tools.datetimes import DatetimeScalarOrArrayConvertible
 from .connectors import *
 from .processors import *
-import asyncio
-from copy import deepcopy
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -77,6 +72,7 @@ class EdataHelper ():
     def process_maximeter (self):
         if "raw" in self.data["maximeter"]:
             processor = MaximeterProcessor (self.data["maximeter"]["raw"])
+            self.data["maximeter"]["hourly"] = processor.output['hourly']
             self.data["maximeter"]["stats"] = processor.output['stats']
 
     def process_pvpc (self):

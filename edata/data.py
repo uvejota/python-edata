@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import timedelta, datetime 
 from collections.abc import Iterable
+from typing import Any
 from typing_extensions import TypedDict
 from copy import deepcopy
 
@@ -160,7 +161,10 @@ def find_gaps (lst: Iterable [dict], dt_from: datetime, dt_to: datetime, gap_int
     _last = dt_from
     for i in _lst:
         if (i[dt_key] - _last) > gap_interval:
-            gaps.append({"from": _last, "to": i[dt_key]})
+            if len(gaps) > 0 and gaps[-1]["to"] == _last:
+                gaps[-1]["to"] = i[dt_key]
+            else:
+                gaps.append({"from": _last, "to": i[dt_key]})
         _last = i[dt_key]
     if (dt_to - _last) > gap_interval:
         gaps.append({"from": _last, "to": dt_to})
