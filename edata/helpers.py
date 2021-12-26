@@ -1,8 +1,7 @@
 import logging
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
-from pandas.core.tools.datetimes import DatetimeScalarOrArrayConvertible
-from edata.connectors import *
+from edata.connectors import DatadisConnector
 from edata.processors import *
 import asyncio
 from copy import deepcopy
@@ -25,14 +24,14 @@ ATTRIBUTES = {
     "month_p1_kWh": 'kWh',
     "month_p2_kWh": 'kWh',
     "month_p3_kWh": 'kWh',
-    "month_pvpc_€": '€',
+    #"month_pvpc_€": '€',
     "last_month_kWh": 'kWh',
     "last_month_daily_kWh": 'kWh',
     "last_month_days": 'd',
     "last_month_p1_kWh": 'kWh',
     "last_month_p2_kWh": 'kWh',
     "last_month_p3_kWh": 'kWh',
-    "last_month_pvpc_€": '€',
+    #"last_month_pvpc_€": '€',
     #"last_month_idle_W": 'W',
     "max_power_kW": 'kW',
     "max_power_date": None,
@@ -89,7 +88,7 @@ class EdataHelper (Helper):
             raise PlatformError (f'platform {platform} not supported, valid options are {PLATFORMS}')
 
         self.last_update = datetime (1970, 1, 1)
-        self._pvpc = EsiosConnector (data=self._data, log_level=log_level)
+        #self._pvpc = EsiosConnector (data=self._data, log_level=log_level)
 
         for x in ATTRIBUTES:
             if self._experimental or x not in EXPERIMENTAL_ATTRS:
@@ -107,22 +106,22 @@ class EdataHelper (Helper):
             self.last_update = datetime.now()
             for i in ['supplies', 'contracts', 'consumptions', 'maximeter']:
                 self._data[i] = self._datadis.data[i]
-            self._data['pvpc'] = self._pvpc.data['pvpc']
+            #self._data['pvpc'] = self._pvpc.data['pvpc']
             self.process_data ()
 
     def update_data (self, cups, date_from=None, date_to=None):
         updated = False
         try:
             updated = self._datadis.update (cups, date_from, date_to)
-            if updated:
-                self._pvpc.update(date_from, date_to)
+            #if updated:
+            #    self._pvpc.update(date_from, date_to)
         except Exception as e:
             _LOGGER.error (f"unhandled exception while updating data for CUPS {cups[-4:]}")
             _LOGGER.exception (e)
         return updated
 
     def process_data (self):
-        for f in [self.process_supplies, self.process_contracts, self.process_consumptions, self.process_maximeter, self.process_pvpc]:
+        for f in [self.process_supplies, self.process_contracts, self.process_consumptions, self.process_maximeter]:#, self.process_pvpc]:
             try:
                 f()
             except Exception as e:
