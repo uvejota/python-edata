@@ -2,7 +2,6 @@ import logging, requests, jwt, logging, json
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 from edata.processors import DataUtils as du
-# EsiosConnector:
 from aiopvpc import PVPCData, TARIFFS
 import pytz as tz
 from copy import deepcopy
