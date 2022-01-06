@@ -39,6 +39,7 @@ logging.basicConfig(level=logging.WARNING)
 class Connector:
     """Base class for connectors"""
 
+class Connector:
     def __init__(self):
         self._data = {}
         self._last_updated = {}
