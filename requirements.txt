@@ -3,4 +3,3 @@ pyjwt
 pandas
 python-dateutil
 bs4
-aiopvpc==2.2.0

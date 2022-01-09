@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 import jwt
 import pytz as tz
 import requests
-from aiopvpc import TARIFFS, PVPCData
+#from aiopvpc import TARIFFS, PVPCData
 from dateutil.relativedelta import relativedelta
 
 from edata.processors import DataUtils as du
@@ -538,7 +538,7 @@ class DatadisConnector(Connector):
         return c
 
 
-class EsiosConnector(Connector):
+"""class EsiosConnector(Connector):
     SCOPE = ["pvpc"]
     UPDATE_INTERVAL = timedelta(hours=24)
     _LABEL = "EsiosConnector"
@@ -584,4 +584,4 @@ class EsiosConnector(Connector):
         else:
             _LOGGER.debug(
                 f"{self._LABEL}: ignoring update request due to update interval limit"
-            )
+            )"""
