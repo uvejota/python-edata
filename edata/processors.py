@@ -121,8 +121,7 @@ class ConsumptionProcessor(Processor):
         if all(k in self._df for k in ("datetime", "value_kWh")):
             self._df["datetime"] = pd.to_datetime(self._df["datetime"])
             self._df["weekday"] = self._df["datetime"].dt.day_name()
-            self._df["px"] = self._df["datetime"].apply(
-                DataUtils.get_pvpc_tariff)
+            self._df["px"] = self._df["datetime"].apply(DataUtils.get_pvpc_tariff)
             self._output["hourly"] = self._df.to_dict("records")
             for opt in [
                 {"date_format": "%Y-%m", "period": "M", "dictkey": "monthly"},
@@ -132,8 +131,7 @@ class ConsumptionProcessor(Processor):
                 for p in ["p1", "p2", "p3"]:
                     _t["value_" + p + "_kWh"] = _t.loc[_t["px"] == p, "value_kWh"]
                 _t.drop(["real"], axis=1, inplace=True)
-                _t = _t.groupby(
-                    [_t.datetime.dt.to_period(opt["period"])]).sum()
+                _t = _t.groupby([_t.datetime.dt.to_period(opt["period"])]).sum()
                 _t.reset_index(inplace=True)
                 _t["datetime"] = _t["datetime"].dt.strftime(opt["date_format"])
                 _t = _t.round(2)
@@ -166,19 +164,19 @@ class MaximeterProcessor(Processor):
 class BillingProcessor:
     _LABEL = "BillingProcessor"
 
-    const = {
-        "p1_kw*y": 30.67266,  # €/kW/year
-        "p2_kw*y": 1.4243591,  # €/kW/year
-        "meter_m": 0.81,  # €/month
-        "market_kw*y": 3.113,  # €/kW/año
-        "e_tax": 1.0511300560,  # multiplicative
+    rules = {
+        "p1_kw_year_eur": 30.67266,  # €/kW/year
+        "p2_kw_year_eur": 1.4243591,  # €/kW/year
+        "meter_month_eur": 0.81,  # €/month
+        "market_kw_year_eur": 3.113,  # €/kW/año
+        "electricity_tax": 1.0511300560,  # multiplicative
         "iva_tax": 1.1,  # multiplicative
     }
 
-    def __init__(self, consumptions_lst, contracts_lst, prices_lst, const={}):
+    def __init__(self, consumptions_lst, contracts_lst, prices_lst, rules={}):
         self.preprocess(consumptions_lst, contracts_lst, prices_lst)
-        for i in const:
-            self.const[i] = const[i]
+        for i in rules:
+            self.rules[i] = rules[i]
 
     def preprocess(self, consumptions_lst, contracts_lst, prices_lst):
         self.valid_data = False
@@ -217,27 +215,28 @@ class BillingProcessor:
                         right_on=["datetime"],
                     )
                     df["datetime"] = pd.to_datetime(df["datetime"])
-                    df["e_taxfree"] = df["price"] * df["value_kWh"]
+                    df["electricity_taxfree"] = df["price"] * df["value_kWh"]
                     df["e_wtax"] = (
-                        df["e_taxfree"] * self.const["e_tax"] *
-                        self.const["iva_tax"]
+                        df["electricity_taxfree"]
+                        * self.rules["electricity_tax"]
+                        * self.rules["iva_tax"]
                     )
-                    hprice_p1 = self.const["p1_kw*y"] / 365 / 24
-                    hprice_p2 = self.const["p2_kw*y"] / 365 / 24
-                    hprice_market = self.const["market_kw*y"] / 365 / 24
+                    hprice_p1 = self.rules["p1_kw_year_eur"] / 365 / 24
+                    hprice_p2 = self.rules["p2_kw_year_eur"] / 365 / 24
+                    hprice_market = self.rules["market_kw_year_eur"] / 365 / 24
                     df["p_taxfree"] = (
                         df["power_p1"] * (hprice_p1 + hprice_market)
                         + df["power_p2"] * hprice_p2
                     )
                     df["p_wtax"] = (
-                        df["p_taxfree"] * self.const["e_tax"] *
-                        self.const["iva_tax"]
+                        df["p_taxfree"]
+                        * self.rules["electricity_tax"]
+                        * self.rules["iva_tax"]
                     )
                     self.df = df
                     self.valid_data = True
                 except Exception as e:
-                    _LOGGER.warning(
-                        f"{self._LABEL} wrong contracts data structure")
+                    _LOGGER.warning(f"{self._LABEL} wrong contracts data structure")
                     _LOGGER.exception(e)
             else:
                 _LOGGER.warning(f"{self._LABEL} wrong prices data structure")
@@ -258,9 +257,9 @@ class BillingProcessor:
                 "energy_term": round(_t["e_wtax"].sum(), 2),
                 "power_term": round(_t["p_wtax"].sum(), 2),
                 "other_terms": round(
-                    self.const["iva_tax"]
+                    self.rules["iva_tax"]
                     * ((dt_to - dt_from).total_seconds() / (24 * 3600))
-                    * self.const["meter_m"]
+                    * self.rules["meter_month_eur"]
                     / 30,
                     2,
                 ),
