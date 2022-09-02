@@ -1,5 +1,4 @@
-requests
-pyjwt
+holidays
 pandas
-python-dateutil
-bs4
+python_dateutil
+requests
