@@ -1,3 +1,7 @@
+[![Downloads](https://pepy.tech/badge/e-data)](https://pepy.tech/project/e-data)
+[![Downloads](https://pepy.tech/badge/e-data/month)](https://pepy.tech/project/e-data)
+[![Downloads](https://pepy.tech/badge/e-data/week)](https://pepy.tech/project/e-data)
+
 # python-edata
 
 Este paquete proporciona herramientas para la descarga de tus datos de consumo eléctrico (desde Datadis.es) y su posterior procesado. La motivación principal es que conocer el consumo puede ayudarnos a reducirlo, e incluso a elegir una tarifa que mejor se adapte a nuestras necesidades. A día de hoy sus capacidades de facturación (€) son limitadas, pero algún día pretende ser capaz de simular facturas con reglas de tarificación personalizadas.
