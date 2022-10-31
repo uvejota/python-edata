@@ -193,27 +193,28 @@ class DatadisConnector:
         )
         c = []
         for i in r:
-            if all(
-                k in i for k in ("time", "date", "consumptionKWh", "obtainMethod")
-            ):
-                hour = str(int(i["time"].split(":")[0]) - 1)
-                date_as_dt = datetime.strptime(
+            if i.get("consumptionKWh", 0) > 0:
+                if all(
+                    k in i for k in ("time", "date", "consumptionKWh", "obtainMethod")
+                ):
+                    hour = str(int(i["time"].split(":")[0]) - 1)
+                    date_as_dt = datetime.strptime(
                         f"{i['date']} {hour.zfill(2)}:00", "%Y/%m/%d %H:%M"
                     )
-                if not (start_date <= date_as_dt and date_as_dt <= end_date):
-                    continue # skip element if dt is out of range
-                d = {
-                    "datetime": date_as_dt,
-                    "delta_h": 1,
-                    "value_kWh": i["consumptionKWh"],
-                    "real": True if i["obtainMethod"] == "Real" else False,
-                }
-                c.append(d)
-            else:
-                _LOGGER.warning(
-                    "Weird data structure while fetching consumption data, got %s",
-                    r,
-                )
+                    if not (start_date <= date_as_dt and date_as_dt <= end_date):
+                        continue  # skip element if dt is out of range
+                    d = {
+                        "datetime": date_as_dt,
+                        "delta_h": 1,
+                        "value_kWh": i["consumptionKWh"],
+                        "real": True if i["obtainMethod"] == "Real" else False,
+                    }
+                    c.append(d)
+                else:
+                    _LOGGER.warning(
+                        "Weird data structure while fetching consumption data, got %s",
+                        r,
+                    )
         return c
 
     def get_max_power(
