@@ -10,14 +10,8 @@ import holidays
 import pandas as pd
 from dateparser import parse
 
-from ..definitions import (
-    ConsumptionData,
-    ContractData,
-    MaxPowerData,
-    PricingData,
-    SupplyData,
-    check_integrity,
-)
+from ..definitions import (ConsumptionData, ContractData, MaxPowerData,
+                           PricingData, SupplyData, check_integrity)
 
 _LOGGER = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)

@@ -5,7 +5,8 @@ from datetime import datetime, timedelta
 
 import requests
 
-from ..definitions import ConsumptionData, ContractData, MaxPowerData, SupplyData
+from ..definitions import (ConsumptionData, ContractData, MaxPowerData,
+                           SupplyData)
 
 _LOGGER = logging.getLogger(__name__)
 logging.basicConfig(level=logging.WARNING)
@@ -63,7 +64,7 @@ class DatadisConnector:
         self._session = requests.Session()
         response = self._session.post(
             URL_TOKEN,
-            request_data={
+            data={
                 TOKEN_USERNAME: self._usr.encode("utf-8"),
                 TOKEN_PASSWD: self._pwd.encode("utf-8"),
             },
@@ -100,14 +101,14 @@ class DatadisConnector:
                 value = data[param]
                 params = params + f"{key}={value}&"
             # query
-            response = self._session.get(url + params, timeout=15)
+            reply = self._session.get(url + params, timeout=15)
             # eval response
-            if response.status_code == 200 and response.json():
+            if reply.status_code == 200 and reply.json():
                 _LOGGER.debug("got a valid response for %s", url + params)
-                response = response.json()
-            elif response.status_code == 401 and not refresh_token:
+                response = reply.json()
+            elif reply.status_code == 401 and not refresh_token:
                 response = self._send_cmd(url, request_data=data, refresh_token=True)
-            elif response.status_code == 200:
+            elif reply.status_code == 200:
                 _LOGGER.info(
                     "%s returned an empty response, try again later", url + params
                 )
@@ -115,8 +116,8 @@ class DatadisConnector:
                 _LOGGER.error(
                     "%s returned %s with code %s",
                     url + params,
-                    response.text,
-                    response.status_code,
+                    reply.text,
+                    reply.status_code,
                 )
         return response
 

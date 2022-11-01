@@ -1,6 +1,7 @@
 """Base definitions for processors"""
 
 from abc import ABC, abstractmethod
+from collections.abc import Iterable
 from copy import deepcopy
 
 
@@ -9,11 +10,9 @@ class Processor(ABC):
 
     _LABEL = "Processor"
 
-    def __init__(self, input, settings={}, auto=True):
+    def __init__(self, input_data: [dict, Iterable], auto=True):
         """Init method"""
-        self._input = deepcopy(input)
-        self._settings = settings
-        self._ready = False
+        self._input = deepcopy(input_data)
         self._output = None
         if auto:
             self.do_process()

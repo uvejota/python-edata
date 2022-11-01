@@ -37,11 +37,8 @@ class REDataConnector:
         """GET query to fetch realtime pvpc prices, historical data is limited to current month"""
         url = URL_REALTIME_PRICES.format(
             geo_id=8744 if is_ceuta_melilla else 8741,
-            start=max(dt.datetime.today().replace(day=1, hour=0, minute=0), dt_from),
-            end=min(
-                (dt.datetime.today() + dt.timedelta(days=2)).replace(hour=0, minute=0),
-                dt_to,
-            ),
+            start=dt_from,
+            end=dt_to,
         )
         data = []
         res = requests.get(url, timeout=REQUESTS_TIMEOUT)
