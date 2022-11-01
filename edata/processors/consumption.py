@@ -43,14 +43,14 @@ class ConsumptionProcessor(Processor):
             self._df["weekday"] = self._df["datetime"].dt.day_name()
             self._df["px"] = self._df["datetime"].apply(utils.get_pvpc_tariff)
             self._output["hourly"] = self._df.to_dict("records")
-            for opt in [
+            for opt in (
                 {
                     "date_format": "%Y-%m-01T00:00:00",
                     "period": "M",
                     "dictkey": "monthly",
                 },
                 {"date_format": "%Y-%m-%dT00:00:00", "period": "D", "dictkey": "daily"},
-            ]:
+            ):
                 _t = self._df.copy()
                 for tariff in ("p1", "p2", "p3"):
                     _t["value_" + tariff + "_kWh"] = _t.loc[
