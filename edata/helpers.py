@@ -8,8 +8,15 @@ from datetime import datetime, timedelta
 import requests
 from dateutil.relativedelta import relativedelta
 
-from .connectors import DatadisConnector
-from .processors import *
+from .connectors.datadis import DatadisConnector
+from .connectors.redata import REDataConnector
+from .processors import utils as DataUtils
+
+from .processors.billing import BillingProcessor
+from .processors.consumption import ConsumptionProcessor
+from .processors.maximeter import MaximeterProcessor
+
+from .definitions import PricingRules
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -29,14 +36,14 @@ ATTRIBUTES = {
     "month_p1_kWh": "kWh",
     "month_p2_kWh": "kWh",
     "month_p3_kWh": "kWh",
-    # "month_pvpc_€": '€',
+    "month_€": "€",
     "last_month_kWh": "kWh",
     "last_month_daily_kWh": "kWh",
     "last_month_days": "d",
     "last_month_p1_kWh": "kWh",
     "last_month_p2_kWh": "kWh",
     "last_month_p3_kWh": "kWh",
-    # "last_month_pvpc_€": '€',
+    "last_month_€": "€",
     # "last_month_idle_W": 'W',
     "max_power_kW": "kW",
     "max_power_date": None,
@@ -51,7 +58,7 @@ EXPERIMENTAL_ATTRS = []
 class EdataHelper:
     """Main EdataHelper class"""
 
-    SCOPE = ["supplies", "contracts", "consumptions", "maximeter"]
+    SCOPE = ["supplies", "contracts", "consumptions", "maximeter", "pvpc"]
     SECURE_FETCH_THRESHOLD = 1
     UPDATE_INTERVAL = timedelta(hours=24)
 
@@ -91,10 +98,23 @@ class EdataHelper:
                 self.attributes[attr] = None
 
         self.datadis_api = DatadisConnector(username, password, log_level=log_level)
+        self.redata_api = REDataConnector()
 
         for attr in ATTRIBUTES:
             if self._experimental or attr not in EXPERIMENTAL_ATTRS:
                 self.attributes[attr] = None
+
+        self.pricing_rules = PricingRules(
+            p1_kw_year_eur=30.67266,
+            p2_kw_year_eur=1.4243591,
+            meter_month_eur=0.81,
+            market_kw_year_eur=3.113,
+            electricity_tax=1.0511300560,
+            iva_tax=1.05,
+        )
+
+        self.enable_billing = True
+        self.is_pvpc = True
 
     async def async_update(
         self, date_from=datetime(1970, 1, 1), date_to=datetime.today()
@@ -113,7 +133,12 @@ class EdataHelper:
         try:
             self.update_datadis(self._cups, date_from, date_to)
         except requests.exceptions.Timeout:
-            _LOGGER.error("Timeout while updating from datadis")
+            _LOGGER.error("Timeout while updating from Datadis")
+
+        try:
+            self.update_redata(date_from, date_to)
+        except requests.exceptions.Timeout:
+            _LOGGER.error("Timeout while updating from REData")
 
         self.process_data()
 
@@ -349,6 +374,30 @@ class EdataHelper:
 
         return True
 
+    def update_redata(
+        self,
+        date_from=(datetime.today() - timedelta(days=30)).replace(hour=0, minute=0),
+        date_to=(datetime.today() + timedelta(days=2)).replace(hour=0, minute=0),
+    ):
+        """Fetch PVPC prices using REData API"""
+
+        self.data["pvpc"], miss_prices = DataUtils.extract_dt_ranges(
+            self.data["pvpc"],
+            date_from,
+            date_to,
+            gap_interval=timedelta(hours=1),
+        )
+        for gap in miss_prices:
+            prices = []
+            while len(prices) == 0 and gap["from"] < gap["to"]:
+                prices = self.redata_api.get_realtime_prices(gap["from"], gap["to"])
+                gap["from"] = gap["from"] + timedelta(days=1)
+            self.data["pvpc"] = DataUtils.extend_by_key(
+                self.data["pvpc"], prices, "datetime"
+            )
+
+        return True
+
     def process_data(self):
         """Process all raw data"""
         for f in [
@@ -356,6 +405,7 @@ class EdataHelper:
             self.process_contracts,
             self.process_consumptions,
             self.process_maximeter,
+            self.process_cost,
         ]:
             try:
                 f()
@@ -392,7 +442,6 @@ class EdataHelper:
         """Process consumptions data"""
         if len(self.data["consumptions"]) > 0:
             proc = ConsumptionProcessor(self.data["consumptions"])
-
             today_starts = datetime(
                 datetime.today().year,
                 datetime.today().month,
@@ -416,7 +465,7 @@ class EdataHelper:
             yday = DataUtils.get_by_key(
                 daily,
                 "datetime",
-                (today_starts.date() - timedelta(days=1)).strftime("%Y-%m-%d"),
+                today_starts - timedelta(days=1),
             )
             self.attributes["yesterday_kWh"] = yday.get("value_kWh", None)
             self.attributes["yesterday_p1_kWh"] = yday.get("value_p1_kWh", None)
@@ -424,9 +473,7 @@ class EdataHelper:
             self.attributes["yesterday_p3_kWh"] = yday.get("value_p3_kWh", None)
             self.attributes["yesterday_hours"] = yday.get("delta_h", None)
 
-            month = DataUtils.get_by_key(
-                monthly, "datetime", month_starts.strftime("%Y-%m")
-            )
+            month = DataUtils.get_by_key(monthly, "datetime", month_starts)
             self.attributes["month_kWh"] = month.get("value_kWh", None)
             self.attributes["month_days"] = month.get("delta_h", 0) / 24
             self.attributes["month_daily_kWh"] = (
@@ -441,7 +488,7 @@ class EdataHelper:
             last_month = DataUtils.get_by_key(
                 monthly,
                 "datetime",
-                (month_starts - relativedelta(months=1)).strftime("%Y-%m"),
+                (month_starts - relativedelta(months=1)),
             )
             self.attributes["last_month_kWh"] = last_month.get("value_kWh", None)
             self.attributes["last_month_days"] = last_month.get("delta_h", 0) / 24
@@ -473,6 +520,45 @@ class EdataHelper:
             self.attributes["max_power_90perc_kW"] = last_relative_year.get(
                 "value_tile90_kW", None
             )
+
+    def process_cost(self):
+        """Process costs"""
+        if self.enable_billing and self.is_pvpc:
+            if len(self.data["pvpc"]) > 0:
+                proc = BillingProcessor(
+                    {
+                        "consumptions": self.data["consumptions"],
+                        "contracts": self.data["contracts"],
+                        "prices": self.data["pvpc"],
+                        "rules": self.pricing_rules,
+                    }
+                )
+                month_starts = datetime(
+                    datetime.today().year, datetime.today().month, 1, 0, 0, 0
+                )
+
+                hourly = proc.output["hourly"]
+                daily = proc.output["daily"]
+                monthly = proc.output["monthly"]
+
+                self.data["cost_hourly_sum"] = hourly
+                self.data["cost_daily_sum"] = daily
+                self.data["cost_monthly_sum"] = monthly
+
+                this_month = DataUtils.get_by_key(
+                    monthly,
+                    "datetime",
+                    month_starts,
+                )
+
+                last_month = DataUtils.get_by_key(
+                    monthly,
+                    "datetime",
+                    (month_starts - relativedelta(months=1)),
+                )
+
+                self.attributes["month_€"] = this_month.get("value_eur", None)
+                self.attributes["last_month_€"] = last_month.get("value_eur", None)
 
     def __str__(self) -> str:
         return "\n".join([f"{i}: {self.attributes[i]}" for i in self.attributes])
