@@ -60,6 +60,3 @@ def test_helper_offline() -> None:
             )
 
     assert True
-
-
-# TODO implement process_custom_billing

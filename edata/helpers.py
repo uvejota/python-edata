@@ -74,10 +74,8 @@ class EdataHelper:
         if self.pricing_rules is not None:
             self.enable_billing = True
             if all(
-                [
-                    x in self.pricing_rules and self.pricing_rules[x] is not None
-                    for x in ("p1_kwh_eur", "p2_kwh_eur", "p3_kwh_eur")
-                ]
+                x in self.pricing_rules and self.pricing_rules[x] is not None
+                for x in ("p1_kwh_eur", "p2_kwh_eur", "p3_kwh_eur")
             ):
                 self.is_pvpc = True
             else:
