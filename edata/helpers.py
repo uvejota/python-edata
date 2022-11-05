@@ -53,7 +53,7 @@ class EdataHelper:
 
     SCOPE = ["supplies", "contracts", "consumptions", "maximeter"]
     SECURE_FETCH_THRESHOLD = 1
-    UPDATE_INTERVAL = timedelta(minutes=60)
+    UPDATE_INTERVAL = timedelta(hours=24)
 
     def __init__(
         self,
