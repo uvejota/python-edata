@@ -8,8 +8,13 @@ from typing import Optional, TypedDict
 
 import pandas as pd
 
-from ..definitions import (ConsumptionData, ContractData, PricingData,
-                           PricingRules, check_integrity)
+from ..definitions import (
+    ConsumptionData,
+    ContractData,
+    PricingData,
+    PricingRules,
+    check_integrity,
+)
 from ..processors import utils
 from ..processors.base import Processor
 
@@ -50,6 +55,9 @@ class BillingProcessor(Processor):
     def do_process(self):
         """Main method for the BillingProcessor"""
         self._output = BillingOutput(hourly=[], daily=[], monthly=[])
+
+        print(self._input["rules"])
+
         _input = SimpleNamespace(**self._input)
 
         c_df = pd.DataFrame(_input.consumptions)
@@ -63,6 +71,7 @@ class BillingProcessor(Processor):
                 p_df = c_df[["datetime", "px"]].copy()
                 p_df["value_eur_kWh"] = 0
                 p_df["delta_h"] = 1
+
                 for tariff in ("p1", "p2", "p3"):
                     p_df.loc[:, ("value_eur_kWh", "px")] = _input.rules[
                         tariff + "_kwh_eur"
