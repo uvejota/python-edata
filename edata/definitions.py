@@ -3,6 +3,7 @@
 import datetime as dt
 import typing
 from typing import TypedDict, _TypedDictMeta
+from collections.abc import Iterable
 
 ATTRIBUTES = {
     "cups": None,
@@ -33,8 +34,6 @@ ATTRIBUTES = {
     "max_power_90perc_kW": "kW",
     "last_registered_kWh_date": None,
 }
-
-EXPERIMENTAL_ATTRS = []
 
 
 class SupplyData(TypedDict):
@@ -99,6 +98,53 @@ class PricingRules(TypedDict):
     market_kw_year_eur: float
     electricity_tax: float
     iva_tax: float
+
+
+DEFAULT_PVPC_RULES = PricingRules(
+    p1_kw_year_eur=30.67266,
+    p2_kw_year_eur=1.4243591,
+    meter_month_eur=0.81,
+    market_kw_year_eur=3.113,
+    electricity_tax=1.0511300560,
+    iva_tax=1.05,
+    p1_kwh_eur=None,
+    p2_kwh_eur=None,
+    p3_kwh_eur=None,
+)
+
+
+class ConsumptionAggData(TypedDict):
+    """A dict holding a Consumption item"""
+
+    datetime: dt.datetime
+    value_p1_kWh: float
+    value_p2_kWh: float
+    value_p3_kWh: float
+
+
+class PricingAggData(TypedDict):
+    """A dict holding a Billing item"""
+
+    datetime: dt.datetime
+    value_eur: float
+    energy_term: float
+    power_term: float
+    others_term: float
+
+
+class EdataData(TypedDict):
+    """A Typed Dict to handle Edata Aggregated Data"""
+
+    supplies: Iterable[SupplyData]
+    contracts: Iterable[ContractData]
+    consumptions: Iterable[ConsumptionData]
+    maximeter: Iterable[MaxPowerData]
+    pvpc: Iterable[PricingData]
+    consumptions_daily_sum: Iterable[ConsumptionAggData]
+    consumptions_monthly_sum: Iterable[ConsumptionAggData]
+    cost_hourly_sum: Iterable[PricingAggData]
+    cost_daily_sum: Iterable[PricingAggData]
+    cost_monthly_sum: Iterable[PricingAggData]
 
 
 def check_integrity(item: dict, definition: _TypedDictMeta):

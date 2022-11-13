@@ -43,7 +43,7 @@ def test_helper_offline() -> None:
             "USER",
             "PASS",
             "CUPS",
-            authorized_nif=None,
+            datadis_authorized_nif=None,
             pricing_rules=PRICING_RULES_PVPC,
             data=data,
         )

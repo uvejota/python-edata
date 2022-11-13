@@ -29,7 +29,7 @@ class REDataConnector:
         log_level: int = logging.WARNING,
     ) -> None:
         """Init method for REDataConnector"""
-        logging.getLogger().setLevel(log_level)
+        _LOGGER.setLevel(log_level)
 
     def get_realtime_prices(
         self, dt_from: dt.datetime, dt_to: dt.datetime, is_ceuta_melilla: bool = False

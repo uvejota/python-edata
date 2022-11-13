@@ -2,11 +2,12 @@
 
 import logging
 from datetime import datetime, timedelta
+from dateutil.relativedelta import relativedelta
 
 import requests
 
-from ..definitions import (ConsumptionData, ContractData, MaxPowerData,
-                           SupplyData)
+from ..definitions import ConsumptionData, ContractData, MaxPowerData, SupplyData
+from ..processors import utils
 
 _LOGGER = logging.getLogger(__name__)
 logging.basicConfig(level=logging.WARNING)
@@ -39,26 +40,32 @@ GET_CONSUMPTION_DATA_MANDATORY_FIELDS = [
 URL_GET_MAX_POWER = "https://datadis.es/api-private/api/get-max-power"
 GET_MAX_POWER_MANDATORY_FIELDS = ["time", "date", "maxPower"]
 
+TIMEOUT = 15
+
+MAX_CONSUMPTIONS_MONTHS = 2
+
 
 class DatadisConnector:
     """A Datadis private API connector"""
-
-    UPDATE_INTERVAL = timedelta(hours=24)
-    SECURE_FETCH_THRESHOLD = 1
 
     def __init__(
         self,
         username: str,
         password: str,
+        enable_smart_fetch: bool = True,
         log_level=logging.WARNING,
     ):
-        logging.getLogger().setLevel(log_level)
+        """Init method"""
+        _LOGGER.setLevel(log_level)
         self._usr = username
         self._pwd = password
         self._session = requests.Session()
         self._token = {}
+        self._smart_fetch = enable_smart_fetch
 
     def _get_token(self):
+        """Private method that fetches a new token if needed"""
+
         _LOGGER.info("No token found, fetching a new one")
         is_valid_token = False
         self._session = requests.Session()
@@ -80,7 +87,11 @@ class DatadisConnector:
             _LOGGER.error("Unknown error while retrieving token, got %s", response.text)
         return is_valid_token
 
-    def _send_cmd(self, url, request_data=None, refresh_token=False):
+    def login(self):
+        """Test to login with provided credentials"""
+        return self._get_token()
+
+    def _send_cmd(self, url, request_data=None, refresh_token=False, is_retry=False):
         """Common method for GET requests"""
 
         if request_data is None:
@@ -101,24 +112,39 @@ class DatadisConnector:
                 value = data[param]
                 params = params + f"{key}={value}&"
             # query
-            reply = self._session.get(url + params, timeout=15)
+            try:
+                reply = self._session.get(url + params, timeout=TIMEOUT)
+            except requests.exceptions.Timeout:
+                _LOGGER.warning("Timeout at %s", url + params)
+                return response
+
             # eval response
             if reply.status_code == 200 and reply.json():
-                _LOGGER.debug("got a valid response for %s", url + params)
+                _LOGGER.debug("200 OK at %s", url + params)
                 response = reply.json()
             elif reply.status_code == 401 and not refresh_token:
                 response = self._send_cmd(url, request_data=data, refresh_token=True)
+            elif reply.status_code == 403:
+                _LOGGER.warning(
+                    "%s %s at %s",
+                    reply.status_code,
+                    reply.text,
+                    url + params,
+                )
             elif reply.status_code == 200:
                 _LOGGER.info(
                     "%s returned an empty response, try again later", url + params
                 )
             else:
-                _LOGGER.error(
-                    "%s returned %s with code %s",
-                    url + params,
-                    reply.text,
-                    reply.status_code,
-                )
+                if is_retry:
+                    _LOGGER.error(
+                        "%s %s at %s",
+                        reply.status_code,
+                        reply.text,
+                        url + params,
+                    )
+                else:
+                    self._send_cmd(url, request_data, is_retry=True)
         return response
 
     def get_supplies(self, authorized_nif=None):
@@ -208,8 +234,34 @@ class DatadisConnector:
         measurement_type,
         point_type,
         authorized_nif=None,
+        is_smart_fetch=False,
     ):
         """Datadis get_consumption_data query"""
+
+        if self._smart_fetch and not is_smart_fetch:
+            _start = start_date
+            consumptions = []
+            while _start < end_date:
+                _end = min(
+                    _start + relativedelta(months=MAX_CONSUMPTIONS_MONTHS), end_date
+                )
+                consumptions = utils.extend_by_key(
+                    consumptions,
+                    self.get_consumption_data(
+                        cups,
+                        distributor_code,
+                        _start,
+                        _end,
+                        measurement_type,
+                        point_type,
+                        authorized_nif,
+                        is_smart_fetch=True,
+                    ),
+                    "datetime",
+                )
+                _start = _end
+            return consumptions
+
         _LOGGER.info("Fetching consumptions from %s to %s", start_date, end_date)
         data = {
             "cups": cups,
@@ -221,7 +273,9 @@ class DatadisConnector:
         }
         if authorized_nif is not None:
             data["authorizedNif"] = authorized_nif
+
         response = self._send_cmd(URL_GET_CONSUMPTION_DATA, request_data=data)
+
         consumptions = []
         for i in response:
             if i.get("consumptionKWh", 0) > 0:

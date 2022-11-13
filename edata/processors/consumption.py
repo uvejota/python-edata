@@ -2,34 +2,23 @@
 
 import logging
 from collections.abc import Iterable
-from datetime import datetime
 from typing import TypedDict
 
 import pandas as pd
 
-from ..definitions import ConsumptionData, check_integrity
-from . import utils as utils
+from ..definitions import ConsumptionData, ConsumptionAggData, check_integrity
+from . import utils
 from .base import Processor
 
 _LOGGER = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
-
-
-class ConsumptionItem(TypedDict):
-    """A dict holding a Consumption item"""
-
-    datetime: datetime
-    value_p1_kWh: float
-    value_p2_kWh: float
-    value_p3_kWh: float
 
 
 class ConsumptionOutput(TypedDict):
     """A dict holding ConsumptionProcessor output property"""
 
-    hourly: Iterable[ConsumptionItem]
-    daily: Iterable[ConsumptionItem]
-    monthly: Iterable[ConsumptionItem]
+    hourly: Iterable[ConsumptionAggData]
+    daily: Iterable[ConsumptionAggData]
+    monthly: Iterable[ConsumptionAggData]
 
 
 class ConsumptionProcessor(Processor):
@@ -42,7 +31,11 @@ class ConsumptionProcessor(Processor):
             self._df["datetime"] = pd.to_datetime(self._df["datetime"])
             self._df["weekday"] = self._df["datetime"].dt.day_name()
             self._df["px"] = self._df["datetime"].apply(utils.get_pvpc_tariff)
-            self._output["hourly"] = self._df.to_dict("records")
+            _t = self._df.copy()
+            _t["datetime"] = _t["datetime"].dt.strftime("%Y-%m-%dT%H:%M:%S")
+            self._output["hourly"] = utils.deserialize_dict(
+                _t.round(3).to_dict("records")
+            )
             for opt in (
                 {
                     "date_format": "%Y-%m-01T00:00:00",

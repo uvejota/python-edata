@@ -2,13 +2,14 @@
 
 import logging
 from collections.abc import Iterable
-from datetime import datetime, timedelta
+from datetime import timedelta
 from types import SimpleNamespace
 from typing import Optional, TypedDict
 
 import pandas as pd
 
 from ..definitions import (
+    PricingAggData,
     ConsumptionData,
     ContractData,
     PricingData,
@@ -19,25 +20,14 @@ from ..processors import utils
 from ..processors.base import Processor
 
 _LOGGER = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
-
-
-class BillingItem(TypedDict):
-    """A dict holding a Billing item"""
-
-    datetime: datetime
-    value_eur: float
-    energy_term: float
-    power_term: float
-    others_term: float
 
 
 class BillingOutput(TypedDict):
     """A dict holding BillingProcessor output property"""
 
-    hourly: Iterable[BillingItem]
-    daily: Iterable[BillingItem]
-    monthly: Iterable[BillingItem]
+    hourly: Iterable[PricingAggData]
+    daily: Iterable[PricingAggData]
+    monthly: Iterable[PricingAggData]
 
 
 class BillingInput(TypedDict):
@@ -55,8 +45,6 @@ class BillingProcessor(Processor):
     def do_process(self):
         """Main method for the BillingProcessor"""
         self._output = BillingOutput(hourly=[], daily=[], monthly=[])
-
-        print(self._input["rules"])
 
         _input = SimpleNamespace(**self._input)
 
@@ -129,7 +117,7 @@ class BillingProcessor(Processor):
                     * _input.rules["iva_tax"]
                 )
                 _df["others_term"] = (
-                    _input.rules["iva_tax"] * _input.rules["meter_month_eur"] / 30
+                    _input.rules["iva_tax"] * _input.rules["meter_month_eur"] / 30 / 24
                 )
                 _df["value_eur"] = _df.energy_term + _df.power_term + _df.others_term
                 _df = _df[_df.value_eur.notnull()]
@@ -142,7 +130,11 @@ class BillingProcessor(Processor):
                         "others_term",
                     ]
                 ]
-                self._output["hourly"] = self._df.round(3).to_dict("records")
+                _t = self._df.copy()
+                _t["datetime"] = _t["datetime"].dt.strftime("%Y-%m-%dT%H:%M:%S")
+                self._output["hourly"] = utils.deserialize_dict(
+                    _t.round(3).to_dict("records")
+                )
                 for opt in (
                     {
                         "date_format": "%Y-%m-01T00:00:00",
