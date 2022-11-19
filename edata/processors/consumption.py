@@ -6,7 +6,7 @@ from typing import TypedDict
 
 import pandas as pd
 
-from ..definitions import ConsumptionData, ConsumptionAggData, check_integrity
+from ..definitions import ConsumptionAggData, ConsumptionData, check_integrity
 from . import utils
 from .base import Processor
 

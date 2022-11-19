@@ -2,8 +2,8 @@
 
 import datetime as dt
 import typing
-from typing import TypedDict, _TypedDictMeta
 from collections.abc import Iterable
+from typing import TypedDict, _TypedDictMeta
 
 ATTRIBUTES = {
     "cups": None,
@@ -14,6 +14,12 @@ ATTRIBUTES = {
     "yesterday_p1_kWh": "kWh",
     "yesterday_p2_kWh": "kWh",
     "yesterday_p3_kWh": "kWh",
+    "last_registered_date": None,
+    "last_registered_day_kWh": "kWh",
+    "last_registered_day_hours": "h",
+    "last_registered_day_p1_kWh": "kWh",
+    "last_registered_day_p2_kWh": "kWh",
+    "last_registered_day_p3_kWh": "kWh",
     "month_kWh": "kWh",
     "month_daily_kWh": "kWh",
     "month_days": "d",
@@ -32,7 +38,6 @@ ATTRIBUTES = {
     "max_power_date": None,
     "max_power_mean_kW": "kW",
     "max_power_90perc_kW": "kW",
-    "last_registered_kWh_date": None,
 }
 
 

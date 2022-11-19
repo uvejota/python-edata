@@ -10,9 +10,9 @@ from dateutil.relativedelta import relativedelta
 
 from .connectors.datadis import DatadisConnector
 from .connectors.redata import REDataConnector
-from .definitions import ATTRIBUTES, PricingRules, EdataData
+from .definitions import ATTRIBUTES, EdataData, PricingRules
 from .processors import utils
-from .processors.billing import BillingProcessor
+from .processors.billing import BillingInput, BillingProcessor
 from .processors.consumption import ConsumptionProcessor
 from .processors.maximeter import MaximeterProcessor
 
@@ -22,7 +22,7 @@ _LOGGER = logging.getLogger(__name__)
 class EdataHelper:
     """Main EdataHelper class"""
 
-    UPDATE_INTERVAL = timedelta(hours=24)
+    UPDATE_INTERVAL = timedelta(hours=1)
 
     def __init__(
         self,
@@ -464,9 +464,34 @@ class EdataHelper:
                     "value_p3_kWh", None
                 )
 
-            self.attributes["last_registered_kWh_date"] = self.data["consumptions"][-1][
-                "datetime"
-            ]
+            if len(self.data["consumptions"]) > 0:
+                self.attributes["last_registered_date"] = self.data["consumptions"][-1][
+                    "datetime"
+                ]
+
+                last_day = utils.get_by_key(
+                    daily,
+                    "datetime",
+                    self.attributes["last_registered_date"].replace(
+                        hour=0, minute=0, second=0
+                    ),
+                )
+                if last_day is not None:
+                    self.attributes["last_registered_day_kWh"] = last_day.get(
+                        "value_kWh", None
+                    )
+                    self.attributes["last_registered_day_p1_kWh"] = last_day.get(
+                        "value_p1_kWh", None
+                    )
+                    self.attributes["last_registered_day_p2_kWh"] = last_day.get(
+                        "value_p2_kWh", None
+                    )
+                    self.attributes["last_registered_day_p3_kWh"] = last_day.get(
+                        "value_p3_kWh", None
+                    )
+                    self.attributes["last_registered_day_hours"] = last_day.get(
+                        "delta_h", None
+                    )
 
     def process_maximeter(self):
         """Process maximeter data"""
@@ -488,12 +513,12 @@ class EdataHelper:
         """Process costs"""
         if self.enable_billing:
             proc = BillingProcessor(
-                {
-                    "consumptions": self.data["consumptions"],
-                    "contracts": self.data["contracts"],
-                    "prices": self.data["pvpc"] if self.is_pvpc else None,
-                    "rules": self.pricing_rules,
-                }
+                BillingInput(
+                    contracts=self.data["contracts"],
+                    consumptions=self.data["consumptions"],
+                    prices=self.data["pvpc"] if self.is_pvpc else None,
+                    rules=self.pricing_rules,
+                )
             )
             month_starts = datetime(
                 datetime.today().year, datetime.today().month, 1, 0, 0, 0

@@ -1,10 +1,12 @@
 """Definitions for API connectors"""
 
+import hashlib
+import json
 import logging
 from datetime import datetime, timedelta
-from dateutil.relativedelta import relativedelta
 
 import requests
+from dateutil.relativedelta import relativedelta
 
 from ..definitions import ConsumptionData, ContractData, MaxPowerData, SupplyData
 from ..processors import utils
@@ -40,9 +42,13 @@ GET_CONSUMPTION_DATA_MANDATORY_FIELDS = [
 URL_GET_MAX_POWER = "https://datadis.es/api-private/api/get-max-power"
 GET_MAX_POWER_MANDATORY_FIELDS = ["time", "date", "maxPower"]
 
-TIMEOUT = 15
+TIMEOUT = 30
 
 MAX_CONSUMPTIONS_MONTHS = 2
+
+QUERY_LIMIT = timedelta(hours=24)
+
+RECENT_QUERIES_FILE = "/tmp/edata_recent_queries.json"
 
 
 class DatadisConnector:
@@ -62,6 +68,45 @@ class DatadisConnector:
         self._session = requests.Session()
         self._token = {}
         self._smart_fetch = enable_smart_fetch
+
+        try:
+            with open(RECENT_QUERIES_FILE, "r") as dst_file:
+                self._recent_queries = json.load(dst_file)
+                for query in self._recent_queries:
+                    self._recent_queries[query] = datetime.fromisoformat(
+                        self._recent_queries[query]
+                    )
+        except Exception as _:
+            self._recent_queries = {}
+
+    def _update_recent_queries(self, query: str) -> None:
+        """Records a recent successful query to avoid exceeding query limits"""
+
+        hash_query = hashlib.md5(query.encode()).hexdigest()
+        self._recent_queries[hash_query] = datetime.now()
+
+        # purge old queries
+        to_delete = []
+        for _query in self._recent_queries:
+            if (datetime.now() - self._recent_queries[_query]) > QUERY_LIMIT:
+                to_delete.append(_query)
+
+        for key in to_delete:
+            self._recent_queries.pop(key, None)
+
+        try:
+            with open(RECENT_QUERIES_FILE, "w") as dst_file:
+                json.dump(utils.serialize_dict(self._recent_queries), dst_file)
+        except Exception:
+            pass
+
+    def _is_recent_query(self, query: str) -> bool:
+        """Checks if a query has been done recently to avoid exceeding query limits"""
+        hash_query = hashlib.md5(query.encode()).hexdigest()
+
+        if hash_query in self._recent_queries:
+            return (datetime.now() - self._recent_queries[hash_query]) < QUERY_LIMIT
+        return False
 
     def _get_token(self):
         """Private method that fetches a new token if needed"""
@@ -112,6 +157,10 @@ class DatadisConnector:
                 value = data[param]
                 params = params + f"{key}={value}&"
             # query
+
+            if self._is_recent_query(url + params):
+                return response
+
             try:
                 reply = self._session.get(url + params, timeout=TIMEOUT)
             except requests.exceptions.Timeout:
@@ -122,19 +171,22 @@ class DatadisConnector:
             if reply.status_code == 200 and reply.json():
                 _LOGGER.debug("200 OK at %s", url + params)
                 response = reply.json()
+                self._update_recent_queries(url + params)
             elif reply.status_code == 401 and not refresh_token:
                 response = self._send_cmd(url, request_data=data, refresh_token=True)
-            elif reply.status_code == 403:
+            elif reply.status_code == 429:
                 _LOGGER.warning(
                     "%s %s at %s",
                     reply.status_code,
                     reply.text,
                     url + params,
                 )
+                self._update_recent_queries(url + params)
             elif reply.status_code == 200:
                 _LOGGER.info(
                     "%s returned an empty response, try again later", url + params
                 )
+                self._update_recent_queries(url + params)
             else:
                 if is_retry:
                     _LOGGER.error(

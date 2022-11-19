@@ -16,8 +16,8 @@ from ..processors.consumption import ConsumptionProcessor
 from ..processors.maximeter import MaximeterProcessor
 
 TESTS_DIR = str(pathlib.Path(__file__).parent.resolve())
-TEST_GOOD_INPUT = TESTS_DIR + "/inputs/processors/edata.storage_TEST"
-TEST_EXPECTATIONS = TESTS_DIR + "/inputs/processors/{key}.out"
+TEST_GOOD_INPUT = TESTS_DIR + "/assets/processors/edata.storage_TEST"
+TEST_EXPECTATIONS = TESTS_DIR + "/assets/processors/{key}.out"
 
 
 def _compare_processor_output(

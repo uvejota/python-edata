@@ -9,9 +9,9 @@ from typing import Optional, TypedDict
 import pandas as pd
 
 from ..definitions import (
-    PricingAggData,
     ConsumptionData,
     ContractData,
+    PricingAggData,
     PricingData,
     PricingRules,
     check_integrity,

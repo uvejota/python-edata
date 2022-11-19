@@ -12,10 +12,10 @@ from ..processors import utils
 
 AT_TIME = "2022-10-22"
 TESTS_DIR = str(pathlib.Path(__file__).parent.resolve())
-TEST_GOOD_INPUT = TESTS_DIR + "/inputs/helpers/edata.storage_TEST"
-TEST_EXPECTATIONS_DATA = TESTS_DIR + "/inputs/helpers/data.out"
+TEST_GOOD_INPUT = TESTS_DIR + "/assets/helpers/edata.storage_TEST"
+TEST_EXPECTATIONS_DATA = TESTS_DIR + "/assets/helpers/data.out"
 TEST_EXPECTATIONS_ATTRIBUTES = (
-    TESTS_DIR + f"/inputs/helpers/attributes_at_{AT_TIME}.out"
+    TESTS_DIR + f"/assets/helpers/attributes_at_{AT_TIME}.out"
 )
 
 PRICING_RULES_PVPC = PricingRules(

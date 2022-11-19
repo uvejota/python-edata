@@ -8,7 +8,7 @@ import pytest
 from ..processors import utils
 
 TESTS_DIR = str(pathlib.Path(__file__).parent.resolve())
-TEST_GOOD_INPUT = TESTS_DIR + "/inputs/utilities/edata.storage_TEST"
+TEST_GOOD_INPUT = TESTS_DIR + "/assets/utilities/edata.storage_TEST"
 TEST_BAD_SUPPLY_INPUT = TEST_GOOD_INPUT + "_bad_supply"
 TEST_BAD_CONTRACT_INPUT = TEST_GOOD_INPUT + "_bad_contract"
 TEST_BAD_CONSUMPTION_INPUT = TEST_GOOD_INPUT + "_bad_consumption"
@@ -50,7 +50,7 @@ def test_serialize():
     # test (de)serialization over good input
     assert check_file(TEST_GOOD_INPUT)
 
-    # test (de)serialization over bad inputs
+    # test (de)serialization over bad assets
     for file in [
         TEST_BAD_SUPPLY_INPUT,
         TEST_BAD_CONTRACT_INPUT,
