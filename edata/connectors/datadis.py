@@ -76,7 +76,7 @@ class DatadisConnector:
                     self._recent_queries[query] = datetime.fromisoformat(
                         self._recent_queries[query]
                     )
-        except Exception as _:
+        except Exception:
             self._recent_queries = {}
 
     def _update_recent_queries(self, query: str) -> None:

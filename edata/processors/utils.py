@@ -7,8 +7,6 @@ from datetime import date, datetime, timedelta
 from json import JSONEncoder
 
 import holidays
-import pandas as pd
-from dateparser import parse
 
 from ..definitions import (
     ConsumptionData,
