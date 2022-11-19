@@ -24,17 +24,26 @@ pip install -r requirements.txt
 
 El paquete consta de tres módulos diferenciados:
 
-* **Conectores** (módulo `connectors`), para definir los métodos de consulta a los diferentes proveedores (ahora mismo únicamente se soporta Datadis con el conector `DatadisConnector`).
-* **Procesadores** (módulo `processors`), para procesar datos de consumo, maxímetro, o coste (tarificación).
-* **Ayudantes** (módulo `helpers`), para ayudar en el uso y gestión de los anteriores, presentando de momento un único ayudante llamado `EdataHelper` que te permite recopilar `X` días de datos y automáticamente procesarlos. También realiza tareas de recuperación ante timeouts o respuestas inválidas.
+* **Conectores** (módulo `connectors`), para definir los métodos de consulta a los diferentes proveedores: Datadis y REData.
+* **Procesadores** (módulo `processors`), para procesar datos de consumo, maxímetro, o coste (tarificación). Ahora mismo consta de tres procesadores: `billing`, `consumption` y `maximeter`, además de algunas utilidades ubicadas en `utils`. Los procesadores deben heredar de la clase Processor definida en `base.py`
+* **Ayudantes** (módulo `helpers`), para ayudar en el uso y gestión de los anteriores, presentando de momento un único ayudante llamado `EdataHelper` que te permite recopilar `X` días de datos (por defecto 365) y automáticamente procesarlos. Los datos son almacenados en la variable `data`, mientras que los atributos autocalculados son almacenados en la variable `attributes`. Por lo general, primero utilizan los conectores y luego procesan los datos, gestionando varias tareas de recuperación (principalmente para Datadis).
 
 Estos módulos corresponden a la siguiente estructura del paquete:
 
 ```
 edata/
     · __init__.py
-    · connectors.py
-    · processors.py
+    · connectors/
+        · __init__.py
+        · datadis.py
+        · redata.py
+    · processors/
+        · __init__.py
+        · base.py
+        · billing.py
+        · consumption.py
+        · maximeter.py
+        · utils.py
     · helpers.py
 ```
 
@@ -48,30 +57,47 @@ Partimos de que tenemos credenciales en Datadis.es. Algunas aclaraciones:
 
 ``` python
 import logging
+
+# importamos definiciones de datos que nos interesen
+from edata.definitions import PricingRules
+# importamos el ayudante
 from edata.helpers import EdataHelper
+# importamos el procesador de utilidades
+from edata.processors import utils
+
+# Preparar reglas de tarificación (si se quiere)
+PRICING_RULES_PVPC = PricingRules(
+    p1_kw_year_eur=30.67266,
+    p2_kw_year_eur=1.4243591,
+    meter_month_eur=0.81,
+    market_kw_year_eur=3.113,
+    electricity_tax=1.0511300560,
+    iva_tax=1.05,
+    # podemos rellenar los siguientes campos si quisiéramos precio fijo (y no pvpc)
+    p1_kwh_eur=None,
+    p2_kwh_eur=None,
+    p3_kwh_eur=None,
+)
 
 # Instanciar el helper
 # 'authorized_nif' permite indicar el NIF de la persona que nos autoriza a consultar su CUPS.
 # 'data' permite "cargar" al helper datos anteriores (resultado edata.data de una ejecución anterior), para evitar volver a consultar los mismos.
-edata = EdataHelper("datadis_username", "datadis_password", "cups", authorized_nif=None, data=None, experimental=False, log_level=logging.INFO)
+edata = EdataHelper(
+            "datadis_user",
+            "datadis_password",
+            "cups",
+            datadis_authorized_nif=None,
+            pricing_rules=PRICING_RULES_PVPC, # si se le pasa None, no aplica tarificación
+            data=None, # aquí podríamos cargar datos anteriores
+        )
 
 # Solicitar actualización de todo el histórico (se almacena en edata.data)
 edata.update(date_from=datetime(1970, 1, 1), date_to=datetime.today())
 
-# Imprimir info de suministros
-print(edata.data["supplies"])
+# volcamos todo lo obtenido a un fichero
+with open("backup.json", "w") as file:
+    json.dump(utils.serialize_dict(edata.data), file) # se puede utilizar deserialize_dict para la posterior lectura del backup
 
-# Imprimir info de contratos
-print(edata.data["contracts"])
-
-# Imprimir info de consumos
-print(edata.data["consumptions"])
-
-# Imprimir info de maxímetro
-print(edata.data["maximeter"])
-
-# Imprimir resumen
-print(edata)
+# Imprimir atributos
+print(edata.attributes)
 ```
-
-El contenido de `edata.data` es un diccionario, por lo que podríamos volcarlo en un fichero utilizando cualquier módulo de python (`json.dumps`, `pandas`, etc.).
