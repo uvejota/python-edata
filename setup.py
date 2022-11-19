@@ -20,14 +20,17 @@ URL = "https://github.com/uvejota/python-edata"
 EMAIL = "vmayorg@outlook.es"
 AUTHOR = "VMG"
 REQUIRES_PYTHON = ">=3.6.0"
-VERSION = "0.4.4"
+VERSION = "1.0.0.dev0"
 
 # What packages are required for this module to be executed?
 REQUIRED = [
-    "requests",
-    "pandas",
-    "python-dateutil",
-    "holidays",
+    "dateparser>=1.1.2",
+    "freezegun>=1.2.1",
+    "holidays>=0.14.2",
+    "pandas>=1.4.3",
+    "pytest>=7.1.2",
+    "python_dateutil>=2.8.2",
+    "requests>=2.28.1",
 ]
 
 # What packages are optional?
