@@ -418,35 +418,61 @@ class EdataHelper:
                 "datetime",
                 today_starts - timedelta(days=1),
             )
-            if yday is not None:
-                self.attributes["yesterday_kWh"] = yday.get("value_kWh", None)
-                self.attributes["yesterday_p1_kWh"] = yday.get("value_p1_kWh", None)
-                self.attributes["yesterday_p2_kWh"] = yday.get("value_p2_kWh", None)
-                self.attributes["yesterday_p3_kWh"] = yday.get("value_p3_kWh", None)
-                self.attributes["yesterday_hours"] = yday.get("delta_h", None)
+            self.attributes["yesterday_kWh"] = (
+                yday.get("value_kWh", None) if yday is not None else None
+            )
+            self.attributes["yesterday_p1_kWh"] = (
+                yday.get("value_p1_kWh", None) if yday is not None else None
+            )
+            self.attributes["yesterday_p2_kWh"] = (
+                yday.get("value_p2_kWh", None) if yday is not None else None
+            )
+            self.attributes["yesterday_p3_kWh"] = (
+                yday.get("value_p3_kWh", None) if yday is not None else None
+            )
+            self.attributes["yesterday_hours"] = (
+                yday.get("delta_h", None) if yday is not None else None
+            )
 
             month = utils.get_by_key(monthly, "datetime", month_starts)
-            if month is not None:
-                self.attributes["month_kWh"] = month.get("value_kWh", None)
-                self.attributes["month_days"] = month.get("delta_h", 0) / 24
-                self.attributes["month_daily_kWh"] = (
+            self.attributes["month_kWh"] = (
+                month.get("value_kWh", None) if month is not None else None
+            )
+            self.attributes["month_days"] = (
+                month.get("delta_h", 0) / 24 if month is not None else None
+            )
+            self.attributes["month_daily_kWh"] = (
+                (
                     (self.attributes["month_kWh"] / self.attributes["month_days"])
                     if self.attributes["month_days"] > 0
                     else 0
                 )
-                self.attributes["month_p1_kWh"] = month.get("value_p1_kWh", None)
-                self.attributes["month_p2_kWh"] = month.get("value_p2_kWh", None)
-                self.attributes["month_p3_kWh"] = month.get("value_p3_kWh", None)
+                if month is not None
+                else None
+            )
+            self.attributes["month_p1_kWh"] = (
+                month.get("value_p1_kWh", None) if month is not None else None
+            )
+            self.attributes["month_p2_kWh"] = (
+                month.get("value_p2_kWh", None) if month is not None else None
+            )
+            self.attributes["month_p3_kWh"] = (
+                month.get("value_p3_kWh", None) if month is not None else None
+            )
 
             last_month = utils.get_by_key(
                 monthly,
                 "datetime",
                 (month_starts - relativedelta(months=1)),
             )
-            if last_month is not None:
-                self.attributes["last_month_kWh"] = last_month.get("value_kWh", None)
-                self.attributes["last_month_days"] = last_month.get("delta_h", 0) / 24
-                self.attributes["last_month_daily_kWh"] = (
+            self.attributes["last_month_kWh"] = (
+                last_month.get("value_kWh", None) if last_month is not None else None
+            )
+            self.attributes["last_month_days"] = (
+                last_month.get("delta_h", 0) / 24 if last_month is not None else None
+            )
+            self.attributes["last_month_daily_kWh"] = (
+                (
                     (
                         self.attributes["last_month_kWh"]
                         / self.attributes["last_month_days"]
@@ -454,15 +480,18 @@ class EdataHelper:
                     if self.attributes["last_month_days"] > 0
                     else 0
                 )
-                self.attributes["last_month_p1_kWh"] = last_month.get(
-                    "value_p1_kWh", None
-                )
-                self.attributes["last_month_p2_kWh"] = last_month.get(
-                    "value_p2_kWh", None
-                )
-                self.attributes["last_month_p3_kWh"] = last_month.get(
-                    "value_p3_kWh", None
-                )
+                if last_month is not None
+                else None
+            )
+            self.attributes["last_month_p1_kWh"] = (
+                last_month.get("value_p1_kWh", None) if last_month is not None else None
+            )
+            self.attributes["last_month_p2_kWh"] = (
+                last_month.get("value_p2_kWh", None) if last_month is not None else None
+            )
+            self.attributes["last_month_p3_kWh"] = (
+                last_month.get("value_p3_kWh", None) if last_month is not None else None
+            )
 
             if len(self.data["consumptions"]) > 0:
                 self.attributes["last_registered_date"] = self.data["consumptions"][-1][
@@ -476,22 +505,21 @@ class EdataHelper:
                         hour=0, minute=0, second=0
                     ),
                 )
-                if last_day is not None:
-                    self.attributes["last_registered_day_kWh"] = last_day.get(
-                        "value_kWh", None
-                    )
-                    self.attributes["last_registered_day_p1_kWh"] = last_day.get(
-                        "value_p1_kWh", None
-                    )
-                    self.attributes["last_registered_day_p2_kWh"] = last_day.get(
-                        "value_p2_kWh", None
-                    )
-                    self.attributes["last_registered_day_p3_kWh"] = last_day.get(
-                        "value_p3_kWh", None
-                    )
-                    self.attributes["last_registered_day_hours"] = last_day.get(
-                        "delta_h", None
-                    )
+                self.attributes["last_registered_day_kWh"] = (
+                    last_day.get("value_kWh", None) if last_day is not None else None
+                )
+                self.attributes["last_registered_day_p1_kWh"] = (
+                    last_day.get("value_p1_kWh", None) if last_day is not None else None
+                )
+                self.attributes["last_registered_day_p2_kWh"] = (
+                    last_day.get("value_p2_kWh", None) if last_day is not None else None
+                )
+                self.attributes["last_registered_day_p3_kWh"] = (
+                    last_day.get("value_p3_kWh", None) if last_day is not None else None
+                )
+                self.attributes["last_registered_day_hours"] = (
+                    last_day.get("delta_h", None) if last_day is not None else None
+                )
 
     def process_maximeter(self):
         """Process maximeter data"""
