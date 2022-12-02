@@ -2,6 +2,7 @@
 
 import datetime as dt
 import logging
+from typing import Optional
 
 import requests
 from dateutil import parser
@@ -9,7 +10,6 @@ from dateutil import parser
 from ..definitions import PricingData
 
 _LOGGER = logging.getLogger(__name__)
-logging.basicConfig(level=logging.WARNING)
 
 REQUESTS_TIMEOUT = 15
 
@@ -26,10 +26,8 @@ class REDataConnector:
 
     def __init__(
         self,
-        log_level: int = logging.WARNING,
     ) -> None:
         """Init method for REDataConnector"""
-        _LOGGER.setLevel(log_level)
 
     def get_realtime_prices(
         self, dt_from: dt.datetime, dt_to: dt.datetime, is_ceuta_melilla: bool = False

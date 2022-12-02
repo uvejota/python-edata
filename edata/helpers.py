@@ -4,6 +4,7 @@ import asyncio
 import logging
 from copy import deepcopy
 from datetime import datetime, timedelta
+from typing import Optional
 
 import requests
 from dateutil.relativedelta import relativedelta
@@ -32,10 +33,7 @@ class EdataHelper:
         datadis_authorized_nif: str = None,
         pricing_rules: PricingRules = None,
         data: EdataData = None,
-        log_level: int = logging.WARNING,
     ) -> None:
-
-        _LOGGER.setLevel(log_level)
 
         self.data = EdataData(
             supplies=[],
@@ -64,7 +62,6 @@ class EdataHelper:
         self.datadis_api = DatadisConnector(
             datadis_username,
             datadis_password,
-            log_level=log_level,
         )
         self.redata_api = REDataConnector()
 
@@ -257,8 +254,21 @@ class EdataHelper:
 
         miss_cons, miss_maxim = sort_and_filter(date_from, date_to)
 
-        _LOGGER.info("Identified missing consumptions: %s", miss_cons)
-        _LOGGER.info("Identified missing maximeter: %s", miss_maxim)
+        _LOGGER.info(
+            "Identified missing consumptions: %s",
+            ", ".join(
+                [x["from"].isoformat() + " - " + x["to"].isoformat() for x in miss_cons]
+            ),
+        )
+        _LOGGER.info(
+            "Identified missing maximeter: %s",
+            ", ".join(
+                [
+                    x["from"].isoformat() + " - " + x["to"].isoformat()
+                    for x in miss_maxim
+                ]
+            ),
+        )
 
         oldest_contract = datetime.today()
         for contract in self.data["contracts"]:

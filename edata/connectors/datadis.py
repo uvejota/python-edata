@@ -4,6 +4,7 @@ import hashlib
 import json
 import logging
 from datetime import datetime, timedelta
+from typing import Optional
 
 import requests
 from dateutil.relativedelta import relativedelta
@@ -12,7 +13,6 @@ from ..definitions import ConsumptionData, ContractData, MaxPowerData, SupplyDat
 from ..processors import utils
 
 _LOGGER = logging.getLogger(__name__)
-logging.basicConfig(level=logging.WARNING)
 
 URL_TOKEN = "https://datadis.es/nikola-auth/tokens/login"
 TOKEN_USERNAME = "username"
@@ -59,10 +59,9 @@ class DatadisConnector:
         username: str,
         password: str,
         enable_smart_fetch: bool = True,
-        log_level=logging.WARNING,
-    ):
+    ) -> None:
         """Init method"""
-        _LOGGER.setLevel(log_level)
+
         self._usr = username
         self._pwd = password
         self._session = requests.Session()
@@ -169,6 +168,7 @@ class DatadisConnector:
                 return response
 
             try:
+                _LOGGER.info("GET %s", url + params)
                 reply = self._session.get(url + params, timeout=TIMEOUT)
             except requests.exceptions.Timeout:
                 _LOGGER.warning("Timeout at %s", url + params)
@@ -176,11 +176,17 @@ class DatadisConnector:
 
             # eval response
             if reply.status_code == 200 and reply.json():
-                _LOGGER.debug("200 OK at %s", url + params)
+                _LOGGER.info("Got 200 OK at %s", url + params)
                 response = reply.json()
+
                 self._update_recent_queries(url + params)
             elif reply.status_code == 401 and not refresh_token:
-                response = self._send_cmd(url, request_data=data, refresh_token=True)
+                response = self._send_cmd(
+                    url,
+                    request_data=data,
+                    refresh_token=True,
+                    ignore_recent_queries=ignore_recent_queries,
+                )
             elif reply.status_code == 429:
                 _LOGGER.warning(
                     "%s %s at %s",
@@ -325,7 +331,6 @@ class DatadisConnector:
                 _start = _end
             return consumptions
 
-        _LOGGER.info("Fetching consumptions from %s to %s", start_date, end_date)
         data = {
             "cups": cups,
             "distributorCode": distributor_code,
@@ -368,7 +373,7 @@ class DatadisConnector:
         self, cups, distributor_code, start_date, end_date, authorized_nif=None
     ):
         """Datadis get_max_power query"""
-        _LOGGER.info("Fetching maximeter from %s to %s", start_date, end_date)
+
         data = {
             "cups": cups,
             "distributorCode": distributor_code,
