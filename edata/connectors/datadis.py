@@ -136,7 +136,14 @@ class DatadisConnector:
         """Test to login with provided credentials"""
         return self._get_token()
 
-    def _send_cmd(self, url, request_data=None, refresh_token=False, is_retry=False):
+    def _send_cmd(
+        self,
+        url,
+        request_data=None,
+        refresh_token=False,
+        is_retry=False,
+        ignore_recent_queries=False,
+    ):
         """Common method for GET requests"""
 
         if request_data is None:
@@ -158,7 +165,7 @@ class DatadisConnector:
                 params = params + f"{key}={value}&"
             # query
 
-            if self._is_recent_query(url + params):
+            if not ignore_recent_queries and self._is_recent_query(url + params):
                 return response
 
             try:
@@ -204,7 +211,9 @@ class DatadisConnector:
         data = {}
         if authorized_nif is not None:
             data["authorizedNif"] = authorized_nif
-        response = self._send_cmd(URL_GET_SUPPLIES, request_data=data)
+        response = self._send_cmd(
+            URL_GET_SUPPLIES, request_data=data, ignore_recent_queries=True
+        )
         supplies = []
         tomorrow_str = (datetime.today() + timedelta(days=1)).strftime("%Y/%m/%d")
         for i in response:
@@ -245,7 +254,9 @@ class DatadisConnector:
         data = {"cups": cups, "distributorCode": distributor_code}
         if authorized_nif is not None:
             data["authorizedNif"] = authorized_nif
-        response = self._send_cmd(URL_GET_CONTRACT_DETAIL, request_data=data)
+        response = self._send_cmd(
+            URL_GET_CONTRACT_DETAIL, request_data=data, ignore_recent_queries=True
+        )
         contracts = []
         tomorrow_str = (datetime.today() + timedelta(days=1)).strftime("%Y/%m/%d")
         for i in response:
