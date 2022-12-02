@@ -120,6 +120,9 @@ class EdataHelper:
                 authorized_nif=self._authorized_nif
             )  # fetch supplies
             if len(supplies) > 0:
+                self.data["supplies"] = utils.extend_by_key(
+                    self.data["supplies"], supplies, "date_start"
+                )  # extend contracts data with new ones
                 # if we got something, update last_update flag
                 self.last_update["supplies"] = datetime.now()
                 _LOGGER.info("Supplies data has been successfully updated")
@@ -135,6 +138,8 @@ class EdataHelper:
                 self.data["contracts"] = utils.extend_by_key(
                     self.data["contracts"], contracts, "date_start"
                 )  # extend contracts data with new ones
+                # if we got something, update last_update flag
+                self.last_update["contracts"] = datetime.now()
                 _LOGGER.info("Contracts data has been successfully updated")
 
     def update_consumptions(
