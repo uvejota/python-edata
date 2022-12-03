@@ -51,7 +51,7 @@ def extract_dt_ranges(lst, dt_from, dt_to, gap_interval=timedelta(hours=1)):
                         newest_dt = i["datetime"]
                 if i["datetime"] != last_dt:  # remove duplicates
                     new_lst.append(i)
-                    last_dt = i["datetime"]
+                    last_dt = i["datetime"] + timedelta(hours=i.get("delta_h", 0))
         if dt_to > last_dt:
             missing.append({"from": last_dt, "to": dt_to})
         _LOGGER.debug("found data from %s to %s", oldest_dt, newest_dt)
