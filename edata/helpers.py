@@ -288,7 +288,7 @@ class EdataHelper:
                 self.update_consumptions(
                     cups,
                     distributor_code,
-                    max([gap["from"], contract["date_start"]]),
+                    max([gap["from"] + timedelta(hours=1), contract["date_start"]]),
                     min([gap["to"], contract["date_end"]]),
                     "0",
                     point_type,
