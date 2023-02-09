@@ -58,7 +58,8 @@ Partimos de que tenemos credenciales en Datadis.es. Algunas aclaraciones:
 * La herramienta acepta el uso de NIF autorizado para consultar el suministro de otro titular.
 
 ``` python
-import logging
+from datetime import datetime
+import json
 
 # importamos definiciones de datos que nos interesen
 from edata.definitions import PricingRules
