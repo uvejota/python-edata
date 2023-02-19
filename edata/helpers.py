@@ -4,7 +4,6 @@ import asyncio
 import logging
 from copy import deepcopy
 from datetime import datetime, timedelta
-from typing import Optional
 
 import requests
 from dateutil.relativedelta import relativedelta
@@ -30,11 +29,10 @@ class EdataHelper:
         datadis_username: str,
         datadis_password: str,
         cups: str,
-        datadis_authorized_nif: str = None,
-        pricing_rules: PricingRules = None,
-        data: EdataData = None,
+        datadis_authorized_nif: str | None = None,
+        pricing_rules: PricingRules | None = None,
+        data: EdataData | None = None,
     ) -> None:
-
         self.data = EdataData(
             supplies=[],
             contracts=[],

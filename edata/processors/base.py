@@ -1,8 +1,8 @@
 """Base definitions for processors"""
 
 from abc import ABC, abstractmethod
-from collections.abc import Iterable
 from copy import deepcopy
+from typing import Any
 
 
 class Processor(ABC):
@@ -10,7 +10,7 @@ class Processor(ABC):
 
     _LABEL = "Processor"
 
-    def __init__(self, input_data: [dict, Iterable], auto=True):
+    def __init__(self, input_data: dict[str, Any], auto: bool = True):
         """Init method"""
         self._input = deepcopy(input_data)
         self._output = None

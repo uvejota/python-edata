@@ -4,7 +4,6 @@ import hashlib
 import json
 import logging
 from datetime import datetime, timedelta
-from typing import Optional
 
 import requests
 from dateutil.relativedelta import relativedelta
@@ -42,9 +41,9 @@ GET_CONSUMPTION_DATA_MANDATORY_FIELDS = [
 URL_GET_MAX_POWER = "https://datadis.es/api-private/api/get-max-power"
 GET_MAX_POWER_MANDATORY_FIELDS = ["time", "date", "maxPower"]
 
-TIMEOUT = 30
+TIMEOUT = 60
 
-MAX_CONSUMPTIONS_MONTHS = 2
+MAX_CONSUMPTIONS_MONTHS = 1
 
 QUERY_LIMIT = timedelta(hours=24)
 
@@ -69,13 +68,13 @@ class DatadisConnector:
         self._smart_fetch = enable_smart_fetch
 
         try:
-            with open(RECENT_QUERIES_FILE, "r") as dst_file:
+            with open(RECENT_QUERIES_FILE, "r", encoding="utf8") as dst_file:
                 self._recent_queries = json.load(dst_file)
                 for query in self._recent_queries:
                     self._recent_queries[query] = datetime.fromisoformat(
                         self._recent_queries[query]
                     )
-        except Exception:
+        except FileNotFoundError:
             self._recent_queries = {}
 
     def _update_recent_queries(self, query: str) -> None:
@@ -94,7 +93,7 @@ class DatadisConnector:
             self._recent_queries.pop(key, None)
 
         try:
-            with open(RECENT_QUERIES_FILE, "w") as dst_file:
+            with open(RECENT_QUERIES_FILE, "w", encoding="utf8") as dst_file:
                 json.dump(utils.serialize_dict(self._recent_queries), dst_file)
         except Exception:
             pass
@@ -178,7 +177,6 @@ class DatadisConnector:
             if reply.status_code == 200 and reply.json():
                 _LOGGER.info("Got 200 OK at %s", url + params)
                 response = reply.json()
-
                 self._update_recent_queries(url + params)
             elif reply.status_code == 401 and not refresh_token:
                 response = self._send_cmd(
@@ -390,10 +388,8 @@ class DatadisConnector:
                     MaxPowerData(
                         datetime=datetime.strptime(
                             f"{i['date']} {i['time']}", "%Y/%m/%d %H:%M"
-                        )
-                        if "date" in i and "time" in i
-                        else None,
-                        value_kW=i["maxPower"] if "maxPower" in i else None,
+                        ),
+                        value_kW=i["maxPower"],
                     )
                 )
             else:

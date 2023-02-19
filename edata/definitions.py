@@ -1,7 +1,6 @@
 """Definitions for data structures"""
 
 import datetime as dt
-import typing
 from collections.abc import Iterable
 from typing import TypedDict, _TypedDictMeta
 
@@ -47,11 +46,11 @@ class SupplyData(TypedDict):
     cups: str
     date_start: dt.datetime
     date_end: dt.datetime
-    address: typing.Optional[str]
-    postal_code: typing.Optional[str]
-    province: typing.Optional[str]
-    municipality: typing.Optional[str]
-    distributor: typing.Optional[str]
+    address: str | None
+    postal_code: str | None
+    province: str | None
+    municipality: str | None
+    distributor: str | None
     pointType: int
     distributorCode: str
 
@@ -63,8 +62,8 @@ class ContractData(TypedDict):
     date_end: dt.datetime
     marketer: str
     distributorCode: str
-    power_p1: typing.Optional[float]
-    power_p2: typing.Optional[float]
+    power_p1: float | None
+    power_p2: float | None
 
 
 class ConsumptionData(TypedDict):
@@ -96,9 +95,9 @@ class PricingRules(TypedDict):
 
     p1_kw_year_eur: float
     p2_kw_year_eur: float
-    p1_kwh_eur: typing.Optional[float]
-    p2_kwh_eur: typing.Optional[float]
-    p3_kwh_eur: typing.Optional[float]
+    p1_kwh_eur: float | None
+    p2_kwh_eur: float | None
+    p3_kwh_eur: float | None
     meter_month_eur: float
     market_kw_year_eur: float
     electricity_tax: float
@@ -140,19 +139,19 @@ class PricingAggData(TypedDict):
 class EdataData(TypedDict):
     """A Typed Dict to handle Edata Aggregated Data"""
 
-    supplies: Iterable[SupplyData]
-    contracts: Iterable[ContractData]
-    consumptions: Iterable[ConsumptionData]
-    maximeter: Iterable[MaxPowerData]
-    pvpc: Iterable[PricingData]
-    consumptions_daily_sum: Iterable[ConsumptionAggData]
-    consumptions_monthly_sum: Iterable[ConsumptionAggData]
-    cost_hourly_sum: Iterable[PricingAggData]
-    cost_daily_sum: Iterable[PricingAggData]
-    cost_monthly_sum: Iterable[PricingAggData]
+    supplies: list[SupplyData]
+    contracts: list[ContractData]
+    consumptions: list[ConsumptionData]
+    maximeter: list[MaxPowerData]
+    pvpc: list[PricingData]
+    consumptions_daily_sum: list[ConsumptionAggData]
+    consumptions_monthly_sum: list[ConsumptionAggData]
+    cost_hourly_sum: list[PricingAggData]
+    cost_daily_sum: list[PricingAggData]
+    cost_monthly_sum: list[PricingAggData]
 
 
-def check_integrity(item: dict, definition: _TypedDictMeta):
+def check_integrity(item: Iterable, definition: _TypedDictMeta):
     """Checks if an item follows a given definition"""
     if all(k in item for k in definition.__required_keys__):
         return True

@@ -25,17 +25,17 @@ _LOGGER = logging.getLogger(__name__)
 class BillingOutput(TypedDict):
     """A dict holding BillingProcessor output property"""
 
-    hourly: Iterable[PricingAggData]
-    daily: Iterable[PricingAggData]
-    monthly: Iterable[PricingAggData]
+    hourly: list[PricingAggData]
+    daily: list[PricingAggData]
+    monthly: list[PricingAggData]
 
 
 class BillingInput(TypedDict):
     """A dict holding BillingProcessor input data"""
 
-    contracts: Iterable[ContractData]
-    consumptions: Iterable[ConsumptionData]
-    prices: Optional[Iterable[PricingData]]
+    contracts: list[ContractData]
+    consumptions: list[ConsumptionData]
+    prices: Optional[list[PricingData]]
     rules: PricingRules
 
 
@@ -78,13 +78,14 @@ class BillingProcessor(Processor):
                         finish = False
                         while not finish:
                             contracts.append(
-                                ContractData(
-                                    datetime=start,
-                                    power_p1=contract["power_p1"],
-                                    power_p2=contract["power_p2"]
+                                {
+                                    "datetime": start,
+                                    "date_start": start,
+                                    "power_p1": contract["power_p1"],
+                                    "power_p2": contract["power_p2"]
                                     if contract["power_p2"] is not None
                                     else contract["power_p1"],
-                                )
+                                }
                             )
                             start = start + timedelta(hours=1)
                             finish = not (end > start)

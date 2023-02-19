@@ -62,6 +62,9 @@ def test_processor(processor: Processor, key: str) -> None:
                 market_kw_year_eur=3.113,
                 electricity_tax=1.0511300560,
                 iva_tax=1.1,
+                p1_kwh_eur=None,
+                p2_kwh_eur=None,
+                p3_kwh_eur=None
             ),
             [
                 PricingData(
