@@ -138,11 +138,11 @@ class DatadisConnector:
 
     def _send_cmd(
         self,
-        url,
-        request_data=None,
-        refresh_token=False,
-        is_retry=False,
-        ignore_recent_queries=False,
+        url: str,
+        request_data: dict | None = None,
+        refresh_token: bool = False,
+        is_retry: bool = False,
+        ignore_recent_queries: bool = False,
     ):
         """Common method for GET requests"""
 
@@ -217,7 +217,7 @@ class DatadisConnector:
                     self._send_cmd(url, request_data, is_retry=True)
         return response
 
-    def get_supplies(self, authorized_nif=None):
+    def get_supplies(self, authorized_nif: str | None = None):
         """Datadis get_supplies query"""
         data = {}
         if authorized_nif is not None:
@@ -260,7 +260,9 @@ class DatadisConnector:
                 )
         return supplies
 
-    def get_contract_detail(self, cups, distributor_code, authorized_nif=None):
+    def get_contract_detail(
+        self, cups: str, distributor_code: str, authorized_nif: str | None = None
+    ):
         """Datadis get_contract_detail query"""
         data = {"cups": cups, "distributorCode": distributor_code}
         if authorized_nif is not None:
@@ -301,14 +303,14 @@ class DatadisConnector:
 
     def get_consumption_data(
         self,
-        cups,
-        distributor_code,
-        start_date,
-        end_date,
-        measurement_type,
-        point_type,
-        authorized_nif=None,
-        is_smart_fetch=False,
+        cups: str,
+        distributor_code: str,
+        start_date: datetime,
+        end_date: datetime,
+        measurement_type: str,
+        point_type: int,
+        authorized_nif: str | None = None,
+        is_smart_fetch: bool = False,
     ):
         """Datadis get_consumption_data query"""
 
@@ -375,7 +377,12 @@ class DatadisConnector:
         return consumptions
 
     def get_max_power(
-        self, cups, distributor_code, start_date, end_date, authorized_nif=None
+        self,
+        cups: str,
+        distributor_code: str,
+        start_date: datetime,
+        end_date: datetime,
+        authorized_nif: str | None = None,
     ):
         """Datadis get_max_power query"""
 
