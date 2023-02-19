@@ -67,6 +67,8 @@ class DatadisConnector:
         self._token = {}
         self._smart_fetch = enable_smart_fetch
 
+        self._warned_queries = []
+
         try:
             with open(RECENT_QUERIES_FILE, "r", encoding="utf8") as dst_file:
                 self._recent_queries = json.load(dst_file)
@@ -200,12 +202,17 @@ class DatadisConnector:
                 self._update_recent_queries(url + params)
             else:
                 if is_retry:
-                    _LOGGER.error(
-                        "%s %s at %s",
-                        reply.status_code,
-                        reply.text,
-                        url + params,
-                    )
+                    if (url + params) not in self._warned_queries:
+                        _LOGGER.warning(
+                            "%s %s at %s. %s. %s",
+                            reply.status_code,
+                            reply.text,
+                            url + params,
+                            "Query temporary disabled",
+                            "Future 500 code errors for this query will be silenced until restart",
+                        )
+                    self._update_recent_queries(url + params)
+                    self._warned_queries.append(url + params)
                 else:
                     self._send_cmd(url, request_data, is_retry=True)
         return response
@@ -357,7 +364,7 @@ class DatadisConnector:
                             datetime=date_as_dt,
                             delta_h=1,
                             value_kWh=i["consumptionKWh"],
-                            real=True if i["obtainMethod"] == "Real" else False,
+                            real=i["obtainMethod"] == "Real",
                         )
                     )
                 else:
