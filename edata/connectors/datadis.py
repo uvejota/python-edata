@@ -41,7 +41,7 @@ GET_CONSUMPTION_DATA_MANDATORY_FIELDS = [
 URL_GET_MAX_POWER = "https://datadis.es/api-private/api/get-max-power"
 GET_MAX_POWER_MANDATORY_FIELDS = ["time", "date", "maxPower"]
 
-TIMEOUT = 60
+TIMEOUT = 3 * 60
 
 MAX_CONSUMPTIONS_MONTHS = 1
 
