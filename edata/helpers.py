@@ -295,7 +295,7 @@ class EdataHelper:
             # update maximeter
             for gap in [
                 x
-                for x in miss_cons
+                for x in miss_maxim
                 if not (
                     date_to < contract["date_start"] or date_from > contract["date_end"]
                 )
