@@ -50,7 +50,9 @@ class ConsumptionProcessor(Processor):
                         _t["px"] == tariff, "value_kWh"
                     ]
                 _t.drop(["real"], axis=1, inplace=True)
-                _t = _t.groupby([_t.datetime.dt.to_period(opt["period"])]).sum()
+                _t = _t.groupby([_t.datetime.dt.to_period(opt["period"])]).sum(
+                    numeric_only=True
+                )
                 _t.reset_index(inplace=True)
                 _t["datetime"] = _t["datetime"].dt.strftime(opt["date_format"])
                 _t = _t.round(2)
