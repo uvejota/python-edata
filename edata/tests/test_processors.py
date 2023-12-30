@@ -29,6 +29,8 @@ def _compare_processor_output(
     with open(source_filepath, "r", encoding="utf-8") as original_file:
         data = utils.deserialize_dict(json.load(original_file))
         processor = processor_class(data[key])
+        # with open(expectations_filepath, "w", encoding="utf-8") as expectations_file:
+        #     json.dump(utils.serialize_dict(processor.output), expectations_file)
         with open(expectations_filepath, "r", encoding="utf-8") as expectations_file:
             expected_output = json.load(expectations_file)
             assert utils.serialize_dict(processor.output) == expected_output
