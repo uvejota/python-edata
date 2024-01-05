@@ -49,6 +49,8 @@ def test_helper_offline() -> None:
         )
         helper.process_data()
 
+        # store("./", helper.data)
+
         # with open(TEST_EXPECTATIONS_DATA, "w", encoding="utf-8") as expectations_file:
         #     json.dump(utils.serialize_dict(helper.data),expectations_file)
 

@@ -1,4 +1,4 @@
-"""Consumption data processors"""
+"""Consumption data processors."""
 
 import logging
 from collections.abc import Iterable
@@ -13,16 +13,18 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class ConsumptionOutput(TypedDict):
-    """A dict holding ConsumptionProcessor output property"""
+    """A dict holding ConsumptionProcessor output property."""
 
     daily: Iterable[ConsumptionAggData]
     monthly: Iterable[ConsumptionAggData]
 
 
 class ConsumptionProcessor(Processor):
-    """A consumptions processor"""
+    """A consumptions processor."""
 
     def do_process(self):
+        """Calculate daily and monthly consumption stats."""
+
         self._output = ConsumptionOutput(daily=[], monthly=[])
 
         last_day_dt = None

@@ -1,4 +1,4 @@
-"""Definitions for data structures"""
+"""Definitions for data structures."""
 
 import datetime as dt
 from collections.abc import Iterable
@@ -41,7 +41,7 @@ ATTRIBUTES = {
 
 
 class SupplyData(TypedDict):
-    """Data structure to represent a supply"""
+    """Data structure to represent a supply."""
 
     cups: str
     date_start: dt.datetime
@@ -56,7 +56,7 @@ class SupplyData(TypedDict):
 
 
 class ContractData(TypedDict):
-    """Data structure to represent a contract"""
+    """Data structure to represent a contract."""
 
     date_start: dt.datetime
     date_end: dt.datetime
@@ -67,23 +67,24 @@ class ContractData(TypedDict):
 
 
 class ConsumptionData(TypedDict):
-    """Data structure to represent a consumption"""
+    """Data structure to represent a consumption."""
 
     datetime: dt.datetime
     delta_h: float
     value_kWh: float
     real: bool
+    # TODO: include surplus_kWh
 
 
 class MaxPowerData(TypedDict):
-    """Data structure to represent a MaxPower"""
+    """Data structure to represent a MaxPower."""
 
     datetime: dt.datetime
     value_kW: float
 
 
 class PricingData(TypedDict):
-    """Data structure to represent pricing data"""
+    """Data structure to represent pricing data."""
 
     datetime: dt.datetime
     value_eur_kWh: float
@@ -91,7 +92,7 @@ class PricingData(TypedDict):
 
 
 class PricingRules(TypedDict):
-    """Data structure to represent custom pricing rules"""
+    """Data structure to represent custom pricing rules."""
 
     p1_kw_year_eur: float
     p2_kw_year_eur: float
@@ -118,7 +119,7 @@ DEFAULT_PVPC_RULES = PricingRules(
 
 
 class ConsumptionAggData(TypedDict):
-    """A dict holding a Consumption item"""
+    """A dict holding a Consumption item."""
 
     datetime: dt.datetime
     value_p1_kWh: float
@@ -127,7 +128,7 @@ class ConsumptionAggData(TypedDict):
 
 
 class PricingAggData(TypedDict):
-    """A dict holding a Billing item"""
+    """A dict holding a Billing item."""
 
     datetime: dt.datetime
     value_eur: float
@@ -137,7 +138,7 @@ class PricingAggData(TypedDict):
 
 
 class EdataData(TypedDict):
-    """A Typed Dict to handle Edata Aggregated Data"""
+    """A Typed Dict to handle Edata Aggregated Data."""
 
     supplies: list[SupplyData]
     contracts: list[ContractData]
@@ -152,7 +153,7 @@ class EdataData(TypedDict):
 
 
 def check_integrity(item: Iterable, definition: _TypedDictMeta):
-    """Checks if an item follows a given definition"""
+    """Check if an item follows a given definition."""
     if all(k in item for k in definition.__required_keys__):
         return True
     return False

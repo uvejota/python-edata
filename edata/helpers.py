@@ -1,4 +1,4 @@
-"""A module for edata helpers"""
+"""A module for edata helpers."""
 
 import asyncio
 import logging
@@ -20,7 +20,7 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class EdataHelper:
-    """Main EdataHelper class"""
+    """Main EdataHelper class."""
 
     UPDATE_INTERVAL = timedelta(hours=1)
 
@@ -83,7 +83,7 @@ class EdataHelper:
         date_from: datetime = datetime(1970, 1, 1),
         date_to: datetime = datetime.today(),
     ):
-        """Async call of update method"""
+        """Async call of update method."""
         asyncio.get_event_loop().run_in_executor(
             None, self.update, *[date_from, date_to]
         )
@@ -93,7 +93,7 @@ class EdataHelper:
         date_from: datetime = datetime(1970, 1, 1),
         date_to: datetime = datetime.today(),
     ):
-        """Synchronous update"""
+        """Synchronous update."""
 
         # update datadis resources
         self.update_datadis(self._cups, date_from, date_to)
@@ -108,7 +108,7 @@ class EdataHelper:
         self.process_data()
 
     def update_supplies(self):
-        """Synchronous data update of supplies"""
+        """Synchronous data update of supplies."""
         if datetime.today().date() != self.last_update["supplies"].date():
             # if supplies haven't been updated today
             supplies = self.datadis_api.get_supplies(
@@ -121,7 +121,7 @@ class EdataHelper:
                 _LOGGER.info("Supplies data has been successfully updated")
 
     def update_contracts(self, cups: str, distributor_code: str):
-        """Synchronous data update of contracts"""
+        """Synchronous data update of contracts."""
         if datetime.today().date() != self.last_update["contracts"].date():
             # if contracts haven't been updated today
             contracts = self.datadis_api.get_contract_detail(
@@ -144,7 +144,7 @@ class EdataHelper:
         measurement_type: str,
         point_type: int,
     ):
-        """Synchronous data update of consumptions"""
+        """Synchronous data update of consumptions."""
 
         if (datetime.now() - self.last_update["consumptions"]) > self.UPDATE_INTERVAL:
             consumptions = self.datadis_api.get_consumption_data(
@@ -167,7 +167,7 @@ class EdataHelper:
                 )
 
     def update_maximeter(self, cups, distributor_code, start_date, end_date):
-        """Synchronous data update of maximeter"""
+        """Synchronous data update of maximeter."""
         if (datetime.now() - self.last_update["maximeter"]) > self.UPDATE_INTERVAL:
             maximeter = self.datadis_api.get_max_power(
                 cups,
@@ -192,7 +192,7 @@ class EdataHelper:
         date_from: datetime = datetime(1970, 1, 1),
         date_to: datetime = datetime.today(),
     ):
-        """Synchronous data update"""
+        """Synchronous data update."""
         _LOGGER.info(
             "Update requested for CUPS %s from %s to %s",
             cups[-4:],
@@ -337,7 +337,7 @@ class EdataHelper:
             hour=0, minute=0
         ),
     ):
-        """Fetch PVPC prices using REData API"""
+        """Fetch PVPC prices using REData API."""
 
         self.data["pvpc"], missing = utils.extract_dt_ranges(
             self.data["pvpc"],
@@ -361,7 +361,7 @@ class EdataHelper:
         return True
 
     def process_data(self):
-        """Process all raw data"""
+        """Process all raw data."""
         for process_method in [
             self.process_supplies,
             self.process_contracts,
@@ -384,14 +384,14 @@ class EdataHelper:
                 )
 
     def process_supplies(self):
-        """Process supplies data"""
+        """Process supplies data."""
         for i in self.data["supplies"]:
             if i["cups"] == self._cups:
                 self.attributes["cups"] = self._cups
                 break
 
     def process_contracts(self):
-        """Process contracts data"""
+        """Process contracts data."""
         most_recent_date = datetime(1970, 1, 1)
         for i in self.data["contracts"]:
             if i["date_end"] > most_recent_date:
@@ -401,7 +401,7 @@ class EdataHelper:
                 break
 
     def process_consumptions(self):
-        """Process consumptions data"""
+        """Process consumptions data."""
         if len(self.data["consumptions"]) > 0:
             proc = ConsumptionProcessor(self.data["consumptions"])
             today_starts = datetime(
@@ -533,7 +533,7 @@ class EdataHelper:
                 )
 
     def process_maximeter(self):
-        """Process maximeter data"""
+        """Process maximeter data."""
         if len(self.data["maximeter"]) > 0:
             processor = MaximeterProcessor(self.data["maximeter"])
             last_relative_year = processor.output["stats"]
@@ -549,7 +549,7 @@ class EdataHelper:
             )
 
     def process_cost(self):
-        """Process costs"""
+        """Process costs."""
         if self.enable_billing:
             proc = BillingProcessor(
                 BillingInput(
