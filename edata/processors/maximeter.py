@@ -1,4 +1,4 @@
-"""Maximeter data processors"""
+"""Maximeter data processors."""
 
 import logging
 from datetime import datetime
@@ -14,7 +14,7 @@ logging.basicConfig(level=logging.INFO)
 
 
 class MaximeterStats(TypedDict):
-    """A dict holding MaximeterProcessor stats"""
+    """A dict holding MaximeterProcessor stats."""
 
     value_max_kW: float
     date_max: datetime
@@ -23,15 +23,16 @@ class MaximeterStats(TypedDict):
 
 
 class MaximeterOutput(TypedDict):
-    """A dict holding MaximeterProcessor output property"""
+    """A dict holding MaximeterProcessor output property."""
 
     stats: MaximeterStats
 
 
 class MaximeterProcessor(Processor):
-    """A processor for Maximeter data"""
+    """A processor for Maximeter data."""
 
     def do_process(self):
+        """Calculate maximeter stats."""
         self._output = {"stats": {}}
         self._df = pd.DataFrame(self._input)
         self._df.round(2)

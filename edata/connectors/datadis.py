@@ -1,4 +1,4 @@
-"""Definitions for API connectors"""
+"""Definitions for API connectors."""
 
 import hashlib
 import json
@@ -51,7 +51,7 @@ RECENT_QUERIES_FILE = "/tmp/edata_recent_queries.json"
 
 
 class DatadisConnector:
-    """A Datadis private API connector"""
+    """A Datadis private API connector."""
 
     def __init__(
         self,
@@ -59,7 +59,7 @@ class DatadisConnector:
         password: str,
         enable_smart_fetch: bool = True,
     ) -> None:
-        """Init method"""
+        """Init method."""
 
         self._usr = username
         self._pwd = password
@@ -70,7 +70,7 @@ class DatadisConnector:
         self._warned_queries = []
 
         try:
-            with open(RECENT_QUERIES_FILE, "r", encoding="utf8") as dst_file:
+            with open(RECENT_QUERIES_FILE, encoding="utf8") as dst_file:
                 self._recent_queries = json.load(dst_file)
                 for query in self._recent_queries:
                     self._recent_queries[query] = datetime.fromisoformat(
@@ -80,7 +80,7 @@ class DatadisConnector:
             self._recent_queries = {}
 
     def _update_recent_queries(self, query: str) -> None:
-        """Records a recent successful query to avoid exceeding query limits"""
+        """Record a recent successful query to avoid exceeding query limits."""
 
         hash_query = hashlib.md5(query.encode()).hexdigest()
         self._recent_queries[hash_query] = datetime.now()
@@ -101,7 +101,7 @@ class DatadisConnector:
             pass
 
     def _is_recent_query(self, query: str) -> bool:
-        """Checks if a query has been done recently to avoid exceeding query limits"""
+        """Check if a query has been done recently to avoid exceeding query limits."""
         hash_query = hashlib.md5(query.encode()).hexdigest()
 
         if hash_query in self._recent_queries:
@@ -109,7 +109,7 @@ class DatadisConnector:
         return False
 
     def _get_token(self):
-        """Private method that fetches a new token if needed"""
+        """Private method that fetches a new token if needed."""
 
         _LOGGER.info("No token found, fetching a new one")
         is_valid_token = False
@@ -133,7 +133,7 @@ class DatadisConnector:
         return is_valid_token
 
     def login(self):
-        """Test to login with provided credentials"""
+        """Test to login with provided credentials."""
         return self._get_token()
 
     def _send_cmd(
@@ -144,7 +144,7 @@ class DatadisConnector:
         is_retry: bool = False,
         ignore_recent_queries: bool = False,
     ):
-        """Common method for GET requests"""
+        """Common method for GET requests."""
 
         if request_data is None:
             data = {}
@@ -200,30 +200,29 @@ class DatadisConnector:
                     "%s returned an empty response, try again later", url + params
                 )
                 self._update_recent_queries(url + params)
+            elif is_retry:
+                if (url + params) not in self._warned_queries:
+                    _LOGGER.warning(
+                        "%s %s at %s. %s. %s",
+                        reply.status_code,
+                        reply.text,
+                        url + params,
+                        "Query temporary disabled",
+                        "Future 500 code errors for this query will be silenced until restart",
+                    )
+                self._update_recent_queries(url + params)
+                self._warned_queries.append(url + params)
             else:
-                if is_retry:
-                    if (url + params) not in self._warned_queries:
-                        _LOGGER.warning(
-                            "%s %s at %s. %s. %s",
-                            reply.status_code,
-                            reply.text,
-                            url + params,
-                            "Query temporary disabled",
-                            "Future 500 code errors for this query will be silenced until restart",
-                        )
-                    self._update_recent_queries(url + params)
-                    self._warned_queries.append(url + params)
-                else:
-                    self._send_cmd(url, request_data, is_retry=True)
+                self._send_cmd(url, request_data, is_retry=True)
         return response
 
     def get_supplies(self, authorized_nif: str | None = None):
-        """Datadis get_supplies query"""
+        """Datadis get_supplies query."""
         data = {}
         if authorized_nif is not None:
             data["authorizedNif"] = authorized_nif
         response = self._send_cmd(
-            URL_GET_SUPPLIES, request_data=data, ignore_recent_queries=True
+            URL_GET_SUPPLIES, request_data=data, ignore_recent_queries=False
         )
         supplies = []
         tomorrow_str = (datetime.today() + timedelta(days=1)).strftime("%Y/%m/%d")
@@ -263,12 +262,12 @@ class DatadisConnector:
     def get_contract_detail(
         self, cups: str, distributor_code: str, authorized_nif: str | None = None
     ):
-        """Datadis get_contract_detail query"""
+        """Datadis get_contract_detail query."""
         data = {"cups": cups, "distributorCode": distributor_code}
         if authorized_nif is not None:
             data["authorizedNif"] = authorized_nif
         response = self._send_cmd(
-            URL_GET_CONTRACT_DETAIL, request_data=data, ignore_recent_queries=True
+            URL_GET_CONTRACT_DETAIL, request_data=data, ignore_recent_queries=False
         )
         contracts = []
         tomorrow_str = (datetime.today() + timedelta(days=1)).strftime("%Y/%m/%d")
@@ -312,7 +311,7 @@ class DatadisConnector:
         authorized_nif: str | None = None,
         is_smart_fetch: bool = False,
     ):
-        """Datadis get_consumption_data query"""
+        """Datadis get_consumption_data query."""
 
         if self._smart_fetch and not is_smart_fetch:
             _start = start_date
@@ -353,7 +352,7 @@ class DatadisConnector:
 
         consumptions = []
         for i in response:
-            if i.get("consumptionKWh", 0) > 0:
+            if "consumptionKWh" in i:
                 if all(k in i for k in GET_CONSUMPTION_DATA_MANDATORY_FIELDS):
                     hour = str(int(i["time"].split(":")[0]) - 1)
                     date_as_dt = datetime.strptime(
@@ -366,6 +365,7 @@ class DatadisConnector:
                             datetime=date_as_dt,
                             delta_h=1,
                             value_kWh=i["consumptionKWh"],
+                            surplus_kWh=i.get("surplusEnergyKWh", 0),
                             real=i["obtainMethod"] == "Real",
                         )
                     )
@@ -384,7 +384,7 @@ class DatadisConnector:
         end_date: datetime,
         authorized_nif: str | None = None,
     ):
-        """Datadis get_max_power query"""
+        """Datadis get_max_power query."""
 
         data = {
             "cups": cups,

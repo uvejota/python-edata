@@ -1,4 +1,4 @@
-"""Generic utilities for processing data"""
+"""Generic utilities for processing data."""
 
 import json
 import logging
@@ -16,6 +16,7 @@ from ..definitions import (
     SupplyData,
     check_integrity,
 )
+import contextlib
 
 _LOGGER = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -26,12 +27,12 @@ WEEKDAYS_P3 = [5, 6]
 
 
 def is_empty(lst):
-    """Checks if a list is empty"""
+    """Check if a list is empty."""
     return len(lst) == 0
 
 
 def extract_dt_ranges(lst, dt_from, dt_to, gap_interval=timedelta(hours=1)):
-    """Filters a list of dicts between two datetimes"""
+    """Filter a list of dicts between two datetimes."""
     new_lst = []
     missing = []
     oldest_dt = None
@@ -61,7 +62,7 @@ def extract_dt_ranges(lst, dt_from, dt_to, gap_interval=timedelta(hours=1)):
 
 
 def extend_by_key(old_lst, new_lst, key):
-    """Extends a list of dicts by key"""
+    """Extend a list of dicts by key."""
     lst = deepcopy(old_lst)
     temp_list = []
     for new_element in new_lst:
@@ -77,7 +78,7 @@ def extend_by_key(old_lst, new_lst, key):
 
 
 def get_by_key(lst, key, value):
-    """Obtains an element of a list of dicts by key=value"""
+    """Obtain an element of a list of dicts by key=value."""
     for i in lst:
         if i[key] == value:
             return i
@@ -85,7 +86,7 @@ def get_by_key(lst, key, value):
 
 
 def get_pvpc_tariff(a_datetime):
-    """Evals the PVPC tariff for a given datetime"""
+    """Evals the PVPC tariff for a given datetime."""
     hdays = holidays.country_holidays("ES")
     hour = a_datetime.hour
     weekday = a_datetime.weekday()
@@ -100,10 +101,10 @@ def get_pvpc_tariff(a_datetime):
 
 
 def serialize_dict(data: dict) -> dict:
-    """Serialize dicts as json"""
+    """Serialize dicts as json."""
 
     class DateTimeEncoder(JSONEncoder):
-        """Replace datetime objects with ISO strings"""
+        """Replace datetime objects with ISO strings."""
 
         def default(self, o):
             if isinstance(o, (date, datetime)):
@@ -113,16 +114,14 @@ def serialize_dict(data: dict) -> dict:
 
 
 def deserialize_dict(serialized_dict: dict) -> dict:
-    """Deserializes a json replacing ISOTIME strings into datetime"""
+    """Deserializes a json replacing ISOTIME strings into datetime."""
 
     def datetime_parser(json_dict):
-        """Parse JSON while converting ISO strings into datetime objects"""
-        for (key, value) in json_dict.items():
+        """Parse JSON while converting ISO strings into datetime objects."""
+        for key, value in json_dict.items():
             if "date" in key:
-                try:
+                with contextlib.suppress(Exception):
                     json_dict[key] = datetime.fromisoformat(value)
-                except Exception:
-                    pass
         return json_dict
 
     data: dict = json.loads(json.dumps(serialized_dict), object_hook=datetime_parser)

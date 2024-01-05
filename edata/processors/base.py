@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 from copy import deepcopy
-from typing import Any
+from typing import Any, Iterable
 
 
 class Processor(ABC):
@@ -10,7 +10,7 @@ class Processor(ABC):
 
     _LABEL = "Processor"
 
-    def __init__(self, input_data: dict[str, Any], auto: bool = True):
+    def __init__(self, input_data: Iterable[dict[str, Any]], auto: bool = True):
         """Init method"""
         self._input = deepcopy(input_data)
         self._output = None

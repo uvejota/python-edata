@@ -1,10 +1,9 @@
-"""Consumption data processors"""
+"""Consumption data processors."""
 
 import logging
 from collections.abc import Iterable
 from typing import TypedDict
-
-import pandas as pd
+from datetime import datetime
 
 from ..definitions import ConsumptionAggData, ConsumptionData, check_integrity
 from . import utils
@@ -14,52 +13,89 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class ConsumptionOutput(TypedDict):
-    """A dict holding ConsumptionProcessor output property"""
+    """A dict holding ConsumptionProcessor output property."""
 
-    hourly: Iterable[ConsumptionAggData]
     daily: Iterable[ConsumptionAggData]
     monthly: Iterable[ConsumptionAggData]
 
 
 class ConsumptionProcessor(Processor):
-    """A consumptions processor"""
+    """A consumptions processor."""
 
     def do_process(self):
-        self._output = ConsumptionOutput(hourly=[], daily=[], monthly=[])
-        self._df = pd.DataFrame(self._input)
-        if check_integrity(self._df, ConsumptionData):
-            self._df["datetime"] = pd.to_datetime(self._df["datetime"])
-            self._df["weekday"] = self._df["datetime"].dt.day_name()
-            self._df["px"] = self._df["datetime"].apply(utils.get_pvpc_tariff)
-            _t = self._df.copy()
-            _t["datetime"] = _t["datetime"].dt.strftime("%Y-%m-%dT%H:%M:%S")
-            self._output["hourly"] = utils.deserialize_dict(
-                _t.round(3).to_dict("records")
-            )
-            for opt in (
-                {
-                    "date_format": "%Y-%m-01T00:00:00",
-                    "period": "M",
-                    "dictkey": "monthly",
-                },
-                {"date_format": "%Y-%m-%dT00:00:00", "period": "D", "dictkey": "daily"},
-            ):
-                _t = self._df.copy()
-                for tariff in ("p1", "p2", "p3"):
-                    _t["value_" + tariff + "_kWh"] = _t.loc[
-                        _t["px"] == tariff, "value_kWh"
-                    ]
-                _t.drop(["real"], axis=1, inplace=True)
-                _t = _t.groupby([_t.datetime.dt.to_period(opt["period"])]).sum(
-                    numeric_only=True
-                )
-                _t.reset_index(inplace=True)
-                _t["datetime"] = _t["datetime"].dt.strftime(opt["date_format"])
-                _t = _t.round(2)
-                self._output[opt["dictkey"]] = utils.deserialize_dict(
-                    _t.to_dict("records")
-                )
-            self._ready = True
-        else:
-            _LOGGER.warning("Wrong data structure")
-            return False
+        """Calculate daily and monthly consumption stats."""
+
+        self._output = ConsumptionOutput(daily=[], monthly=[])
+
+        last_day_dt = None
+        last_month_dt = None
+
+        for consumption in self._input:
+            if check_integrity(consumption, ConsumptionData):
+                # for each consumption element (if valid)
+
+                curr_hour_dt: datetime = consumption["datetime"]
+                curr_day_dt = curr_hour_dt.replace(hour=0, minute=0, second=0)
+                curr_month_dt = curr_day_dt.replace(day=1)
+
+                tariff = utils.get_pvpc_tariff(curr_hour_dt)
+                kwh = consumption["value_kWh"]
+                delta_h = consumption["delta_h"]
+
+                kwh_p1 = 0
+                kwh_p2 = 0
+                kwh_p3 = 0
+
+                match tariff:
+                    case "p1":
+                        kwh_p1 = kwh
+                    case "p2":
+                        kwh_p2 = kwh
+                    case "p3":
+                        kwh_p3 = kwh
+
+                if last_day_dt is None or curr_day_dt != last_day_dt:
+                    self._output["daily"].append(
+                        ConsumptionAggData(
+                            datetime=curr_day_dt,
+                            value_kWh=kwh,
+                            delta_h=delta_h,
+                            value_p1_kWh=kwh_p1,
+                            value_p2_kWh=kwh_p2,
+                            value_p3_kWh=kwh_p3,
+                        )
+                    )
+                else:
+                    self._output["daily"][-1]["value_kWh"] += kwh
+                    self._output["daily"][-1]["value_p1_kWh"] += kwh_p1
+                    self._output["daily"][-1]["value_p2_kWh"] += kwh_p2
+                    self._output["daily"][-1]["value_p3_kWh"] += kwh_p3
+                    self._output["daily"][-1]["delta_h"] += delta_h
+
+                if last_month_dt is None or curr_month_dt != last_month_dt:
+                    self._output["monthly"].append(
+                        ConsumptionAggData(
+                            datetime=curr_month_dt,
+                            value_kWh=kwh,
+                            delta_h=delta_h,
+                            value_p1_kWh=kwh_p1,
+                            value_p2_kWh=kwh_p2,
+                            value_p3_kWh=kwh_p3,
+                        )
+                    )
+                else:
+                    self._output["monthly"][-1]["value_kWh"] += kwh
+                    self._output["monthly"][-1]["value_p1_kWh"] += kwh_p1
+                    self._output["monthly"][-1]["value_p2_kWh"] += kwh_p2
+                    self._output["monthly"][-1]["value_p3_kWh"] += kwh_p3
+                    self._output["monthly"][-1]["delta_h"] += delta_h
+
+                last_day_dt = curr_day_dt
+                last_month_dt = curr_month_dt
+
+        for item in self._output:
+            for cons in self._output[item]:
+                cons["value_kWh"] = round(cons["value_kWh"], 2)
+                cons["value_p1_kWh"] = round(cons["value_p1_kWh"], 2)
+                cons["value_p2_kWh"] = round(cons["value_p2_kWh"], 2)
+                cons["value_p3_kWh"] = round(cons["value_p3_kWh"], 2)
