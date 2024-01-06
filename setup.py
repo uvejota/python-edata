@@ -20,7 +20,7 @@ URL = "https://github.com/uvejota/python-edata"
 EMAIL = "vmayorg@outlook.es"
 AUTHOR = "VMG"
 REQUIRES_PYTHON = ">=3.6.0"
-VERSION = "1.2.1"
+VERSION = "1.2.2"
 
 # What packages are required for this module to be executed?
 REQUIRED = [
@@ -30,7 +30,7 @@ REQUIRED = [
     "pytest>=7.1.2",
     "python_dateutil>=2.8.2",
     "requests>=2.28.1",
-    "voluptuous>=0.14.1",
+    "voluptuous>=0.13.1",
     "Jinja2>=3.1.2",
 ]
 
