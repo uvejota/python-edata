@@ -1,25 +1,32 @@
 """Billing data processors"""
 
 import logging
-from collections.abc import Iterable
-from datetime import timedelta
-from types import SimpleNamespace
+from datetime import datetime, timedelta
 from typing import Optional, TypedDict
+from jinja2 import Environment
 
-import pandas as pd
+import voluptuous
 
 from ..definitions import (
     ConsumptionData,
+    ConsumptionSchema,
     ContractData,
+    ContractSchema,
     PricingAggData,
     PricingData,
     PricingRules,
-    check_integrity,
+    PricingRulesSchema,
+    PricingSchema,
 )
 from ..processors import utils
 from ..processors.base import Processor
 
 _LOGGER = logging.getLogger(__name__)
+
+DEFAULT_ENERGY_BILLING_FORMULA = "electricity_tax * iva_tax * kwh_eur * kwh"
+DEFAULT_POWER_BILLING_FORMULA = "electricity_tax * iva_tax * (p1_kw * (p1_kw_year_eur + market_kw_year_eur) + p2_kw * p2_kw_year_eur) / 365 / 24"
+DEFAULT_OTHERS_BILLING_FORMULA = "iva_tax * meter_month_eur / 30 / 24"
+DEFAULT_SURPLUS_BILLING_FORMULA = "surplus_kwh * surplus_kwh_eur"
 
 
 class BillingOutput(TypedDict):
@@ -46,119 +53,166 @@ class BillingProcessor(Processor):
         """Main method for the BillingProcessor"""
         self._output = BillingOutput(hourly=[], daily=[], monthly=[])
 
-        _input = SimpleNamespace(**self._input)
+        _schema = voluptuous.Schema(
+            {
+                voluptuous.Required("contracts"): [ContractSchema],
+                voluptuous.Required("consumptions"): [ConsumptionSchema],
+                voluptuous.Optional("prices", default=None): voluptuous.Union(
+                    [voluptuous.Union(PricingSchema)], None
+                ),
+                voluptuous.Required("rules"): PricingRulesSchema,
+                voluptuous.Optional(
+                    "energy_formula", default=DEFAULT_ENERGY_BILLING_FORMULA
+                ): str,
+                voluptuous.Optional(
+                    "power_formula", default=DEFAULT_POWER_BILLING_FORMULA
+                ): str,
+                voluptuous.Optional(
+                    "others_formula", default=DEFAULT_OTHERS_BILLING_FORMULA
+                ): str,
+                voluptuous.Optional(
+                    "surplus_formula", default=DEFAULT_SURPLUS_BILLING_FORMULA
+                ): str,
+            }
+        )
+        self._input = _schema(self._input)
 
-        c_df = pd.DataFrame(_input.consumptions)
-        if check_integrity(c_df, ConsumptionData):
-            c_df.datetime = pd.to_datetime(c_df.datetime)
-            _df = c_df
-            if _input.prices is not None and len(_input.prices) > 0:
-                p_df = pd.DataFrame(_input.prices)
-            else:
-                c_df["px"] = c_df["datetime"].apply(utils.get_pvpc_tariff)
-                p_df = c_df[["datetime", "px"]].copy()
-                p_df["value_eur_kWh"] = 0
-                p_df["delta_h"] = 1
+        # joint data by datetime
+        _data = {
+            x["datetime"]: {"datetime": x["datetime"], "kwh": x["value_kWh"], "surplus_kwh": x["surplus_kWh"]}
+            for x in self._input["consumptions"]
+        }
 
-                for tariff in ("p1", "p2", "p3"):
-                    p_df.loc[:, ("value_eur_kWh", "px")] = _input.rules[
-                        tariff + "_kwh_eur"
-                    ]
-                p_df.drop("px", axis=1, inplace=True)
-            if check_integrity(p_df, PricingData):
-                p_df.datetime = pd.to_datetime(p_df.datetime)
-                _df = _df.merge(
-                    p_df, how="left", left_on=["datetime"], right_on=["datetime"]
-                )
-                contracts = []
-                for contract in _input.contracts:
-                    if check_integrity(contract, ContractData):
-                        start = contract["date_start"]
-                        end = contract["date_end"]
-                        finish = False
-                        while not finish:
-                            contracts.append(
-                                {
-                                    "datetime": start,
-                                    "date_start": start,
-                                    "power_p1": contract["power_p1"],
-                                    "power_p2": contract["power_p2"]
-                                    if contract["power_p2"] is not None
-                                    else contract["power_p1"],
-                                }
-                            )
-                            start = start + timedelta(hours=1)
-                            finish = not (end > start)
-                    else:
-                        _LOGGER.warning("Wrong contracts data structure")
+        for contract in self._input["contracts"]:
+            start = contract["date_start"]
+            end = contract["date_end"]
+            finish = False
+            while not finish:
+                if start in _data:
+                    _data[start]["p1_kw"] = contract["power_p1"]
+                    _data[start]["p2_kw"] = contract["power_p2"]
+                start = start + timedelta(hours=1)
+                finish = not (end > start)
 
-                _df = _df.merge(
-                    pd.DataFrame(contracts),
-                    how="left",
-                    left_on=["datetime"],
-                    right_on=["datetime"],
-                )
-                _df.datetime = pd.to_datetime(_df.datetime)
-                _df["energy_cost_raw"] = _df.value_eur_kWh * _df.value_kWh
-                _df["energy_term"] = (
-                    _df.energy_cost_raw
-                    * _input.rules["electricity_tax"]
-                    * _input.rules["iva_tax"]
-                )
-                hprice_p1 = _input.rules["p1_kw_year_eur"] / 365 / 24
-                hprice_p2 = _input.rules["p2_kw_year_eur"] / 365 / 24
-                hprice_market = _input.rules["market_kw_year_eur"] / 365 / 24
-                _df["power_cost_raw"] = (
-                    _df.power_p1 * (hprice_p1 + hprice_market)
-                    + _df.power_p2 * hprice_p2
-                )
-                _df["power_term"] = (
-                    _df.power_cost_raw
-                    * _input.rules["electricity_tax"]
-                    * _input.rules["iva_tax"]
-                )
-                _df["others_term"] = (
-                    _input.rules["iva_tax"] * _input.rules["meter_month_eur"] / 30 / 24
-                )
-                _df["value_eur"] = _df.energy_term + _df.power_term + _df.others_term
-                _df = _df[_df.value_eur.notnull()]
-                self._df = _df[
-                    [
-                        "datetime",
-                        "value_eur",
-                        "energy_term",
-                        "power_term",
-                        "others_term",
-                    ]
-                ]
-                _t = self._df.copy()
-                _t["datetime"] = _t["datetime"].dt.strftime("%Y-%m-%dT%H:%M:%S")
-                self._output["hourly"] = utils.deserialize_dict(
-                    _t.round(3).to_dict("records")
-                )
-                for opt in (
-                    {
-                        "date_format": "%Y-%m-01T00:00:00",
-                        "period": "M",
-                        "dictkey": "monthly",
-                    },
-                    {
-                        "date_format": "%Y-%m-%dT00:00:00",
-                        "period": "D",
-                        "dictkey": "daily",
-                    },
-                ):
-                    _t = self._df.copy()
-                    _t = _t.groupby([_t.datetime.dt.to_period(opt["period"])]).sum(
-                        numeric_only=True
+        if self._input["prices"]:
+            for x in self._input["prices"]:
+                start = x["datetime"]
+                if start in _data:
+                    _data[start]["kwh_eur"] = x["value_eur_kWh"]
+
+        env = Environment()
+        energy_expr = env.compile_expression(
+            f'({self._input["energy_formula"]})|float|round(3)'
+        )
+        power_expr = env.compile_expression(
+            f'({self._input["power_formula"]})|float|round(3)'
+        )
+        others_expr = env.compile_expression(
+            f'({self._input["others_formula"]})|float|round(3)'
+        )
+        surplus_expr = env.compile_expression(
+            f'({self._input["surplus_formula"]})|float|round(3)'
+        )
+
+        _data = sorted([_data[x] for x in _data], key=lambda x: x["datetime"])
+        hourly = []
+        for x in _data:
+            x.update(self._input["rules"])
+            tariff = utils.get_pvpc_tariff(x["datetime"])
+            if "kwh_eur" not in x:
+                if tariff == "p1":
+                    x["kwh_eur"] = x["p1_kwh_eur"]
+                elif tariff == "p2":
+                    x["kwh_eur"] = x["p2_kwh_eur"]
+                elif tariff == "p3":
+                    x["kwh_eur"] = x["p3_kwh_eur"]
+
+                if x["kwh_eur"] is None:
+                    continue
+            
+            if tariff == "p1":
+                x["surplus_kwh_eur"] = x["surplus_p1_kwh_eur"]
+            elif tariff == "p2":
+                x["surplus_kwh_eur"] = x["surplus_p2_kwh_eur"]
+            elif tariff == "p3":
+                x["surplus_kwh_eur"] = x["surplus_p3_kwh_eur"]
+
+
+            new_item = PricingAggData(
+                datetime=x["datetime"],
+                energy_term=round(energy_expr(**x), 3),
+                power_term=round(power_expr(**x), 3),
+                others_term=round(others_expr(**x), 3),
+                surplus_term=round(surplus_expr(**x), 3),
+                value_eur=0,
+                delta_h=1,
+            )
+
+            new_item["value_eur"] = round(
+                new_item["energy_term"]
+                + new_item["power_term"]
+                + new_item["others_term"] - new_item["surplus_term"],
+                3,
+            )
+
+            hourly.append(new_item)
+
+        self._output["hourly"] = hourly
+
+        last_day_dt = None
+        last_month_dt = None
+        for hour in hourly:
+            curr_hour_dt: datetime = hour["datetime"]
+            curr_day_dt = curr_hour_dt.replace(hour=0, minute=0, second=0)
+            curr_month_dt = curr_day_dt.replace(day=1)
+
+            if last_day_dt is None or curr_day_dt != last_day_dt:
+                self._output["daily"].append(
+                    PricingAggData(
+                        datetime=curr_day_dt,
+                        energy_term=hour["energy_term"],
+                        power_term=hour["power_term"],
+                        others_term=hour["others_term"],
+                        surplus_term=hour["surplus_term"],
+                        value_eur=hour["value_eur"],
+                        delta_h=hour["delta_h"],
                     )
-                    _t.reset_index(inplace=True)
-                    _t["datetime"] = _t["datetime"].dt.strftime(opt["date_format"])
-                    _t = _t.round(2)
-                    self._output[opt["dictkey"]] = utils.deserialize_dict(
-                        _t.to_dict("records")
-                    )
+                )
             else:
-                _LOGGER.warning("Wrong prices data structure")
-        else:
-            _LOGGER.warning("Wrong consumptions data structure")
+                self._output["daily"][-1]["energy_term"] += hour["energy_term"]
+                self._output["daily"][-1]["power_term"] += hour["power_term"]
+                self._output["daily"][-1]["others_term"] += hour["others_term"]
+                self._output["daily"][-1]["surplus_term"] += hour["surplus_term"]
+                self._output["daily"][-1]["value_eur"] += hour["value_eur"]
+                self._output["daily"][-1]["delta_h"] += hour["delta_h"]
+
+            if last_month_dt is None or curr_month_dt != last_month_dt:
+                self._output["monthly"].append(
+                    PricingAggData(
+                        datetime=curr_month_dt,
+                        energy_term=hour["energy_term"],
+                        power_term=hour["power_term"],
+                        others_term=hour["others_term"],
+                        surplus_term=hour["surplus_term"],
+                        value_eur=hour["value_eur"],
+                        delta_h=hour["delta_h"],
+                    )
+                )
+            else:
+                self._output["monthly"][-1]["energy_term"] += hour["energy_term"]
+                self._output["monthly"][-1]["power_term"] += hour["power_term"]
+                self._output["monthly"][-1]["others_term"] += hour["others_term"]
+                self._output["monthly"][-1]["surplus_term"] += hour["surplus_term"]
+                self._output["monthly"][-1]["value_eur"] += hour["value_eur"]
+                self._output["monthly"][-1]["delta_h"] += hour["delta_h"]
+
+            last_day_dt = curr_day_dt
+            last_month_dt = curr_month_dt
+
+        for item in self._output:
+            for cost in self._output[item]:
+                cost["energy_term"] = round(cost["energy_term"], 3)
+                cost["power_term"] = round(cost["power_term"], 3)
+                cost["others_term"] = round(cost["others_term"], 3)
+                cost["surplus_term"] = round(cost["surplus_term"], 3)
+                cost["value_eur"] = round(cost["value_eur"], 3)

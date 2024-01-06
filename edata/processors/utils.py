@@ -8,14 +8,9 @@ from json import JSONEncoder
 
 import holidays
 
-from ..definitions import (
-    ConsumptionData,
-    ContractData,
-    MaxPowerData,
-    PricingData,
-    SupplyData,
-    check_integrity,
-)
+import math
+import functools
+
 import contextlib
 
 _LOGGER = logging.getLogger(__name__)
@@ -77,6 +72,18 @@ def extend_by_key(old_lst, new_lst, key):
     return lst
 
 
+def extend_and_filter(old_lst, new_lst, key, dt_from, dt_to):
+    data = extend_by_key(old_lst, new_lst, key)
+    data, _ = extract_dt_ranges(
+        data,
+        dt_from,
+        dt_to,
+        gap_interval=timedelta(days=365),  # trick
+    )
+
+    return data
+
+
 def get_by_key(lst, key, value):
     """Obtain an element of a list of dicts by key=value."""
     for i in lst:
@@ -124,37 +131,18 @@ def deserialize_dict(serialized_dict: dict) -> dict:
                     json_dict[key] = datetime.fromisoformat(value)
         return json_dict
 
-    data: dict = json.loads(json.dumps(serialized_dict), object_hook=datetime_parser)
-    if data is not None and data != {}:
-        for key in data:
-            if key == "supplies":
-                if not isinstance(data[key], list):
-                    return None
-                for i in data[key]:
-                    if not check_integrity(i, SupplyData):
-                        return None
-            elif key == "contracts":
-                if not isinstance(data[key], list):
-                    return None
-                for i in data[key]:
-                    if not check_integrity(i, ContractData):
-                        return None
-            elif key == "consumptions":
-                if not isinstance(data[key], list):
-                    return None
-                for i in data[key]:
-                    if not check_integrity(i, ConsumptionData):
-                        return None
-            elif key == "maximeter":
-                if not isinstance(data[key], list):
-                    return None
-                for i in data[key]:
-                    if not check_integrity(i, MaxPowerData):
-                        return None
-            elif key == "pvpc":
-                if not isinstance(data[key], list):
-                    return None
-                for i in data[key]:
-                    if not check_integrity(i, PricingData):
-                        return None
-        return data
+    return json.loads(json.dumps(serialized_dict), object_hook=datetime_parser)
+
+
+def percentile(N, percent, key=lambda x: x):
+    """Find the percentile of a list of values."""
+    if not N:
+        return None
+    k = (len(N) - 1) * percent
+    f = math.floor(k)
+    c = math.ceil(k)
+    if f == c:
+        return key(N[int(k)])
+    d0 = key(N[int(f)]) * (c - k)
+    d1 = key(N[int(c)]) * (k - f)
+    return d0 + d1

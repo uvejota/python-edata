@@ -4,13 +4,15 @@ import logging
 from datetime import datetime
 from typing import TypedDict
 
-import pandas as pd
 from dateparser import parse
+import voluptuous
+
+from edata.definitions import MaxPowerSchema
+from edata.processors import utils
 
 from .base import Processor
 
 _LOGGER = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
 
 
 class MaximeterStats(TypedDict):
@@ -33,17 +35,22 @@ class MaximeterProcessor(Processor):
 
     def do_process(self):
         """Calculate maximeter stats."""
-        self._output = {"stats": {}}
-        self._df = pd.DataFrame(self._input)
-        self._df.round(2)
-        if all(k in self._df for k in ("datetime", "value_kW")):
-            idx = self._df["value_kW"].argmax()
-            self._output["stats"] = MaximeterOutput(
-                value_max_kW=round(self._df["value_kW"][idx], 2),
-                date_max=parse(str(self._df["datetime"][idx])),
-                value_mean_kW=self._df["value_kW"].mean().round(2),
-                value_tile90_kW=self._df["value_kW"].quantile(0.9).round(2),
-            )
-        else:
-            _LOGGER.warning("Wrong data structure")
-            return False
+
+        self._output = MaximeterOutput(stats={})
+
+        _schema = voluptuous.Schema([MaxPowerSchema])
+        self._input = _schema(self._input)
+
+        _values = [x["value_kW"] for x in self._input]
+
+        _max_kW = max(_values)
+        _dt_max_kW = parse(str(self._input[_values.index(_max_kW)]["datetime"]))
+        _mean_kW = sum(_values) / len(_values)
+        _tile90_kW = utils.percentile(_values, 0.9)
+
+        self._output["stats"] = MaximeterOutput(
+            value_max_kW=round(_max_kW, 2),
+            date_max=_dt_max_kW,
+            value_mean_kW=round(_mean_kW, 2),
+            value_tile90_kW=round(_tile90_kW, 2),
+        )

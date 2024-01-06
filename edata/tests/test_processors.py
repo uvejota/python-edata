@@ -66,7 +66,7 @@ def test_processor(processor: Processor, key: str) -> None:
                 iva_tax=1.1,
                 p1_kwh_eur=None,
                 p2_kwh_eur=None,
-                p3_kwh_eur=None
+                p3_kwh_eur=None,
             ),
             [
                 PricingData(
@@ -108,7 +108,8 @@ def test_processor_billing(
                 "rules": rules,
             }
         )
-
+    # with open(TEST_EXPECTATIONS.format(key=f"billing-{_id}"), "w", encoding="utf-8") as expectations_file:
+    #     json.dump(utils.serialize_dict(processor.output), expectations_file)
     with open(
         TEST_EXPECTATIONS.format(key=f"billing-{_id}"), "r", encoding="utf-8"
     ) as expectations_file:

@@ -2,7 +2,6 @@
 
 import asyncio
 import logging
-from copy import deepcopy
 from datetime import datetime, timedelta
 
 import requests
@@ -15,6 +14,7 @@ from .processors import utils
 from .processors.billing import BillingInput, BillingProcessor
 from .processors.consumption import ConsumptionProcessor
 from .processors.maximeter import MaximeterProcessor
+from .storage import check_storage_integrity, load_storage, dump_storage
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -31,6 +31,7 @@ class EdataHelper:
         cups: str,
         datadis_authorized_nif: str | None = None,
         pricing_rules: PricingRules | None = None,
+        storage_dir_path: str | None = None,
         data: EdataData | None = None,
     ) -> None:
         self.data = EdataData(
@@ -46,14 +47,24 @@ class EdataHelper:
             cost_monthly_sum=[],
         )
         self.attributes = {}
-
+        self._storage_dir = storage_dir_path
         self._cups = cups
         self._authorized_nif = datadis_authorized_nif
         self.last_update = {x: datetime(1970, 1, 1) for x in self.data.keys()}
+        self._date_from = datetime(1970, 1, 1)
+        self._date_to = datetime.today()
+        self._must_dump = True
 
         if data is not None:
-            for i in [x for x in self.data.keys() if x in data]:
-                self.data[i] = deepcopy(data[i])
+            data = check_storage_integrity(data)
+            self.data = data
+            self._must_dump = False
+        else:
+            try:
+                self.data = load_storage(self._cups, self._storage_dir)
+            except Exception:
+                pass
+
         for attr in ATTRIBUTES:
             self.attributes[attr] = None
 
@@ -94,6 +105,8 @@ class EdataHelper:
         date_to: datetime = datetime.today(),
     ):
         """Synchronous update."""
+        self._date_from = date_from
+        self._date_to = date_to
 
         # update datadis resources
         self.update_datadis(self._cups, date_from, date_to)
@@ -106,6 +119,9 @@ class EdataHelper:
                 _LOGGER.error("Timeout exception while updating from REData")
 
         self.process_data()
+
+        if self._must_dump:
+            dump_storage(self._cups, self.data, self._storage_dir)
 
     def update_supplies(self):
         """Synchronous data update of supplies."""
@@ -403,7 +419,14 @@ class EdataHelper:
     def process_consumptions(self):
         """Process consumptions data."""
         if len(self.data["consumptions"]) > 0:
-            proc = ConsumptionProcessor(self.data["consumptions"])
+            try:
+                new_data_from = self.data["consumptions_monthly_sum"][-1]["datetime"]
+            except Exception:
+                new_data_from = self._date_from
+
+            proc = ConsumptionProcessor(
+                [x for x in self.data["consumptions"] if x["datetime"] >= new_data_from]
+            )
             today_starts = datetime(
                 datetime.today().year,
                 datetime.today().month,
@@ -417,15 +440,24 @@ class EdataHelper:
                 datetime.today().year, datetime.today().month, 1, 0, 0, 0
             )
 
-            # hourly = proc.output['hourly']
-            daily = proc.output["daily"]
-            monthly = proc.output["monthly"]
-
-            self.data["consumptions_daily_sum"] = daily
-            self.data["consumptions_monthly_sum"] = monthly
+            # append new data
+            self.data["consumptions_daily_sum"] = utils.extend_and_filter(
+                self.data["consumptions_daily_sum"],
+                proc.output["daily"],
+                "datetime",
+                self._date_from,
+                self._date_to,
+            )
+            self.data["consumptions_monthly_sum"] = utils.extend_and_filter(
+                self.data["consumptions_monthly_sum"],
+                proc.output["monthly"],
+                "datetime",
+                self._date_from,
+                self._date_to,
+            )
 
             yday = utils.get_by_key(
-                daily,
+                self.data["consumptions_daily_sum"],
                 "datetime",
                 today_starts - timedelta(days=1),
             )
@@ -445,7 +477,9 @@ class EdataHelper:
                 yday.get("delta_h", None) if yday is not None else None
             )
 
-            month = utils.get_by_key(monthly, "datetime", month_starts)
+            month = utils.get_by_key(
+                self.data["consumptions_monthly_sum"], "datetime", month_starts
+            )
             self.attributes["month_kWh"] = (
                 month.get("value_kWh", None) if month is not None else None
             )
@@ -472,7 +506,7 @@ class EdataHelper:
             )
 
             last_month = utils.get_by_key(
-                monthly,
+                self.data["consumptions_monthly_sum"],
                 "datetime",
                 (month_starts - relativedelta(months=1)),
             )
@@ -509,28 +543,31 @@ class EdataHelper:
                     "datetime"
                 ]
 
-                last_day = utils.get_by_key(
-                    daily,
-                    "datetime",
-                    self.attributes["last_registered_date"].replace(
-                        hour=0, minute=0, second=0
-                    ),
-                )
-                self.attributes["last_registered_day_kWh"] = (
-                    last_day.get("value_kWh", None) if last_day is not None else None
-                )
-                self.attributes["last_registered_day_p1_kWh"] = (
-                    last_day.get("value_p1_kWh", None) if last_day is not None else None
-                )
-                self.attributes["last_registered_day_p2_kWh"] = (
-                    last_day.get("value_p2_kWh", None) if last_day is not None else None
-                )
-                self.attributes["last_registered_day_p3_kWh"] = (
-                    last_day.get("value_p3_kWh", None) if last_day is not None else None
-                )
-                self.attributes["last_registered_day_hours"] = (
-                    last_day.get("delta_h", None) if last_day is not None else None
-                )
+                if len(self.data["consumptions_daily_sum"]) > 0:
+                    last_day = self.data["consumptions_daily_sum"][-1]
+                    self.attributes["last_registered_day_kWh"] = (
+                        last_day.get("value_kWh", None)
+                        if last_day is not None
+                        else None
+                    )
+                    self.attributes["last_registered_day_p1_kWh"] = (
+                        last_day.get("value_p1_kWh", None)
+                        if last_day is not None
+                        else None
+                    )
+                    self.attributes["last_registered_day_p2_kWh"] = (
+                        last_day.get("value_p2_kWh", None)
+                        if last_day is not None
+                        else None
+                    )
+                    self.attributes["last_registered_day_p3_kWh"] = (
+                        last_day.get("value_p3_kWh", None)
+                        if last_day is not None
+                        else None
+                    )
+                    self.attributes["last_registered_day_hours"] = (
+                        last_day.get("delta_h", None) if last_day is not None else None
+                    )
 
     def process_maximeter(self):
         """Process maximeter data."""
@@ -551,11 +588,24 @@ class EdataHelper:
     def process_cost(self):
         """Process costs."""
         if self.enable_billing:
+            try:
+                new_data_from = self.data["cost_monthly_sum"][-1]["datetime"]
+            except Exception:
+                new_data_from = self._date_from
+
             proc = BillingProcessor(
                 BillingInput(
                     contracts=self.data["contracts"],
-                    consumptions=self.data["consumptions"],
-                    prices=self.data["pvpc"] if self.is_pvpc else None,
+                    consumptions=[
+                        x
+                        for x in self.data["consumptions"]
+                        if x["datetime"] >= new_data_from
+                    ],
+                    prices=[
+                        x for x in self.data["pvpc"] if x["datetime"] >= new_data_from
+                    ]
+                    if self.is_pvpc
+                    else None,
                     rules=self.pricing_rules,
                 )
             )
@@ -563,22 +613,42 @@ class EdataHelper:
                 datetime.today().year, datetime.today().month, 1, 0, 0, 0
             )
 
+            # append new data
             hourly = proc.output["hourly"]
-            daily = proc.output["daily"]
-            monthly = proc.output["monthly"]
+            self.data["cost_hourly_sum"] = utils.extend_and_filter(
+                self.data["cost_hourly_sum"],
+                hourly,
+                "datetime",
+                self._date_from,
+                self._date_to,
+            )
 
-            self.data["cost_hourly_sum"] = hourly
-            self.data["cost_daily_sum"] = daily
-            self.data["cost_monthly_sum"] = monthly
+            daily = proc.output["daily"]
+            self.data["cost_daily_sum"] = utils.extend_and_filter(
+                self.data["cost_daily_sum"],
+                daily,
+                "datetime",
+                self._date_from,
+                self._date_to,
+            )
+
+            monthly = proc.output["monthly"]
+            self.data["cost_monthly_sum"] = utils.extend_and_filter(
+                self.data["cost_monthly_sum"],
+                monthly,
+                "datetime",
+                self._date_from,
+                self._date_to,
+            )
 
             this_month = utils.get_by_key(
-                monthly,
+                self.data["cost_monthly_sum"],
                 "datetime",
                 month_starts,
             )
 
             last_month = utils.get_by_key(
-                monthly,
+                self.data["cost_monthly_sum"],
                 "datetime",
                 (month_starts - relativedelta(months=1)),
             )
