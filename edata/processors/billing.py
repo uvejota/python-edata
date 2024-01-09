@@ -23,10 +23,12 @@ from ..processors.base import Processor
 
 _LOGGER = logging.getLogger(__name__)
 
-DEFAULT_ENERGY_BILLING_FORMULA = "electricity_tax * iva_tax * kwh_eur * kwh"
-DEFAULT_POWER_BILLING_FORMULA = "electricity_tax * iva_tax * (p1_kw * (p1_kw_year_eur + market_kw_year_eur) + p2_kw * p2_kw_year_eur) / 365 / 24"
-DEFAULT_OTHERS_BILLING_FORMULA = "iva_tax * meter_month_eur / 30 / 24"
-DEFAULT_SURPLUS_BILLING_FORMULA = "surplus_kwh * surplus_kwh_eur"
+DEFAULT_BILLING_ENERGY_FORMULA = "electricity_tax * iva_tax * kwh_eur * kwh"
+DEFAULT_BILLING_POWER_FORMULA = "electricity_tax * iva_tax * (p1_kw * (p1_kw_year_eur + market_kw_year_eur) + p2_kw * p2_kw_year_eur) / 365 / 24"
+DEFAULT_BILLING_OTHERS_FORMULA = "iva_tax * meter_month_eur / 30 / 24"
+DEFAULT_BILLING_SURPLUS_FORMULA = (
+    "electricity_tax * iva_tax * [surplus_kwh, kwh]|min * surplus_kwh_eur"
+)
 
 
 class BillingOutput(TypedDict):
@@ -62,16 +64,16 @@ class BillingProcessor(Processor):
                 ),
                 voluptuous.Required("rules"): PricingRulesSchema,
                 voluptuous.Optional(
-                    "energy_formula", default=DEFAULT_ENERGY_BILLING_FORMULA
+                    "energy_formula", default=DEFAULT_BILLING_ENERGY_FORMULA
                 ): str,
                 voluptuous.Optional(
-                    "power_formula", default=DEFAULT_POWER_BILLING_FORMULA
+                    "power_formula", default=DEFAULT_BILLING_POWER_FORMULA
                 ): str,
                 voluptuous.Optional(
-                    "others_formula", default=DEFAULT_OTHERS_BILLING_FORMULA
+                    "others_formula", default=DEFAULT_BILLING_OTHERS_FORMULA
                 ): str,
                 voluptuous.Optional(
-                    "surplus_formula", default=DEFAULT_SURPLUS_BILLING_FORMULA
+                    "surplus_formula", default=DEFAULT_BILLING_SURPLUS_FORMULA
                 ): str,
             }
         )

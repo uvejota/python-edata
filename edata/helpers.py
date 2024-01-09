@@ -11,7 +11,14 @@ from .connectors.datadis import DatadisConnector
 from .connectors.redata import REDataConnector
 from .definitions import ATTRIBUTES, EdataData, PricingRules
 from .processors import utils
-from .processors.billing import BillingInput, BillingProcessor
+from .processors.billing import (
+    BillingInput,
+    BillingProcessor,
+    DEFAULT_BILLING_ENERGY_FORMULA,
+    DEFAULT_BILLING_OTHERS_FORMULA,
+    DEFAULT_BILLING_POWER_FORMULA,
+    DEFAULT_BILLING_SURPLUS_FORMULA,
+)
 from .processors.consumption import ConsumptionProcessor
 from .processors.maximeter import MaximeterProcessor
 from .storage import check_storage_integrity, load_storage, dump_storage
@@ -31,6 +38,10 @@ class EdataHelper:
         cups: str,
         datadis_authorized_nif: str | None = None,
         pricing_rules: PricingRules | None = None,
+        billing_energy_formula: str = DEFAULT_BILLING_ENERGY_FORMULA,
+        billing_power_formula: str = DEFAULT_BILLING_POWER_FORMULA,
+        billing_others_formula: str = DEFAULT_BILLING_OTHERS_FORMULA,
+        billing_surplus_formula: str = DEFAULT_BILLING_SURPLUS_FORMULA,
         storage_dir_path: str | None = None,
         data: EdataData | None = None,
     ) -> None:
@@ -46,11 +57,16 @@ class EdataHelper:
             cost_daily_sum=[],
             cost_monthly_sum=[],
         )
+        self._billing_energy_formula = billing_energy_formula
+        self._billing_power_formula = billing_power_formula
+        self._billing_others_formula = billing_others_formula
+        self._billing_surplus_formula = billing_surplus_formula
+
         self.attributes = {}
         self._storage_dir = storage_dir_path
         self._cups = cups
         self._authorized_nif = datadis_authorized_nif
-        self.last_update = {x: datetime(1970, 1, 1) for x in self.data.keys()}
+        self.last_update = {x: datetime(1970, 1, 1) for x in self.data}
         self._date_from = datetime(1970, 1, 1)
         self._date_to = datetime.today()
         self._must_dump = True
@@ -607,6 +623,10 @@ class EdataHelper:
                     if self.is_pvpc
                     else None,
                     rules=self.pricing_rules,
+                    energy_formula=self._billing_energy_formula,
+                    power_formula=self._billing_power_formula,
+                    others_formula=self._billing_others_formula,
+                    surplus_formula=self._billing_surplus_formula,
                 )
             )
             month_starts = datetime(
