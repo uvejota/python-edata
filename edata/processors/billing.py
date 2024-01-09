@@ -79,7 +79,11 @@ class BillingProcessor(Processor):
 
         # joint data by datetime
         _data = {
-            x["datetime"]: {"datetime": x["datetime"], "kwh": x["value_kWh"], "surplus_kwh": x["surplus_kWh"]}
+            x["datetime"]: {
+                "datetime": x["datetime"],
+                "kwh": x["value_kWh"],
+                "surplus_kwh": x["surplus_kWh"] if x["surplus_kWh"] is not None else 0,
+            }
             for x in self._input["consumptions"]
         }
 
@@ -129,14 +133,13 @@ class BillingProcessor(Processor):
 
                 if x["kwh_eur"] is None:
                     continue
-            
+
             if tariff == "p1":
                 x["surplus_kwh_eur"] = x["surplus_p1_kwh_eur"]
             elif tariff == "p2":
                 x["surplus_kwh_eur"] = x["surplus_p2_kwh_eur"]
             elif tariff == "p3":
                 x["surplus_kwh_eur"] = x["surplus_p3_kwh_eur"]
-
 
             new_item = PricingAggData(
                 datetime=x["datetime"],
@@ -151,7 +154,8 @@ class BillingProcessor(Processor):
             new_item["value_eur"] = round(
                 new_item["energy_term"]
                 + new_item["power_term"]
-                + new_item["others_term"] - new_item["surplus_term"],
+                + new_item["others_term"]
+                - new_item["surplus_term"],
                 3,
             )
 

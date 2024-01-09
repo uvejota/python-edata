@@ -110,7 +110,7 @@ ConsumptionSchema = vol.Schema(
         vol.Required("datetime"): dt.datetime,
         vol.Required("delta_h"): vol.Coerce(float),
         vol.Required("value_kWh"): vol.Coerce(float),
-        vol.Optional("surplus_kWh", default=0): vol.Coerce(float),
+        vol.Optional("surplus_kWh", default=0): vol.Union(vol.Coerce(float), None),
         vol.Required("real"): bool,
     }
 )
