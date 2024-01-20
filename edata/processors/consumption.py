@@ -3,7 +3,7 @@
 import logging
 from collections.abc import Iterable
 from typing import TypedDict
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import voluptuous
 
@@ -32,13 +32,24 @@ class ConsumptionProcessor(Processor):
         last_day_dt = None
         last_month_dt = None
 
-        _schema = voluptuous.Schema([ConsumptionSchema])
+        _schema = voluptuous.Schema(
+            {
+                voluptuous.Required("consumptions"): [ConsumptionSchema],
+                voluptuous.Optional("cycle_start_day", default=1): voluptuous.Range(
+                    1, 30
+                ),
+            }
+        )
         self._input = _schema(self._input)
 
-        for consumption in self._input:
+        self._cycle_offset = self._input["cycle_start_day"] - 1
+
+        for consumption in self._input["consumptions"]:
             curr_hour_dt: datetime = consumption["datetime"]
             curr_day_dt = curr_hour_dt.replace(hour=0, minute=0, second=0)
-            curr_month_dt = curr_day_dt.replace(day=1)
+            curr_month_dt = (curr_day_dt - timedelta(days=self._cycle_offset)).replace(
+                day=1
+            )
 
             tariff = utils.get_pvpc_tariff(curr_hour_dt)
             kwh = consumption["value_kWh"]

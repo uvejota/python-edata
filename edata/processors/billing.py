@@ -20,15 +20,9 @@ from ..definitions import (
 )
 from ..processors import utils
 from ..processors.base import Processor
+import contextlib
 
 _LOGGER = logging.getLogger(__name__)
-
-DEFAULT_BILLING_ENERGY_FORMULA = "electricity_tax * iva_tax * kwh_eur * kwh"
-DEFAULT_BILLING_POWER_FORMULA = "electricity_tax * iva_tax * (p1_kw * (p1_kw_year_eur + market_kw_year_eur) + p2_kw * p2_kw_year_eur) / 365 / 24"
-DEFAULT_BILLING_OTHERS_FORMULA = "iva_tax * meter_month_eur / 30 / 24"
-DEFAULT_BILLING_SURPLUS_FORMULA = (
-    "electricity_tax * iva_tax * [surplus_kwh, kwh]|min * surplus_kwh_eur"
-)
 
 
 class BillingOutput(TypedDict):
@@ -63,21 +57,11 @@ class BillingProcessor(Processor):
                     [voluptuous.Union(PricingSchema)], None
                 ),
                 voluptuous.Required("rules"): PricingRulesSchema,
-                voluptuous.Optional(
-                    "energy_formula", default=DEFAULT_BILLING_ENERGY_FORMULA
-                ): str,
-                voluptuous.Optional(
-                    "power_formula", default=DEFAULT_BILLING_POWER_FORMULA
-                ): str,
-                voluptuous.Optional(
-                    "others_formula", default=DEFAULT_BILLING_OTHERS_FORMULA
-                ): str,
-                voluptuous.Optional(
-                    "surplus_formula", default=DEFAULT_BILLING_SURPLUS_FORMULA
-                ): str,
             }
         )
         self._input = _schema(self._input)
+
+        self._cycle_offset = self._input["rules"]["cycle_start_day"] - 1
 
         # joint data by datetime
         _data = {
@@ -108,16 +92,16 @@ class BillingProcessor(Processor):
 
         env = Environment()
         energy_expr = env.compile_expression(
-            f'({self._input["energy_formula"]})|float|round(3)'
+            f'({self._input["rules"]["energy_formula"]})|float|round(3)'
         )
         power_expr = env.compile_expression(
-            f'({self._input["power_formula"]})|float|round(3)'
+            f'({self._input["rules"]["power_formula"]})|float|round(3)'
         )
         others_expr = env.compile_expression(
-            f'({self._input["others_formula"]})|float|round(3)'
+            f'({self._input["rules"]["others_formula"]})|float|round(3)'
         )
         surplus_expr = env.compile_expression(
-            f'({self._input["surplus_formula"]})|float|round(3)'
+            f'({self._input["rules"]["surplus_formula"]})|float|round(3)'
         )
 
         _data = sorted([_data[x] for x in _data], key=lambda x: x["datetime"])
@@ -143,12 +127,23 @@ class BillingProcessor(Processor):
             elif tariff == "p3":
                 x["surplus_kwh_eur"] = x["surplus_p3_kwh_eur"]
 
+            _energy_term = 0
+            _power_term = 0
+            _others_term = 0
+            _surplus_term = 0
+
+            with contextlib.suppress(Exception):
+                _energy_term = round(energy_expr(**x), 3)
+                _power_term = round(power_expr(**x), 3)
+                _others_term = round(others_expr(**x), 3)
+                _surplus_term = round(surplus_expr(**x), 3)
+
             new_item = PricingAggData(
                 datetime=x["datetime"],
-                energy_term=round(energy_expr(**x), 3),
-                power_term=round(power_expr(**x), 3),
-                others_term=round(others_expr(**x), 3),
-                surplus_term=round(surplus_expr(**x), 3),
+                energy_term=_energy_term,
+                power_term=_power_term,
+                others_term=_others_term,
+                surplus_term=_surplus_term,
                 value_eur=0,
                 delta_h=1,
             )
@@ -170,7 +165,9 @@ class BillingProcessor(Processor):
         for hour in hourly:
             curr_hour_dt: datetime = hour["datetime"]
             curr_day_dt = curr_hour_dt.replace(hour=0, minute=0, second=0)
-            curr_month_dt = curr_day_dt.replace(day=1)
+            curr_month_dt = (curr_day_dt - timedelta(days=self._cycle_offset)).replace(
+                day=1
+            )
 
             if last_day_dt is None or curr_day_dt != last_day_dt:
                 self._output["daily"].append(

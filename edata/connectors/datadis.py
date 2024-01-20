@@ -4,9 +4,10 @@ import hashlib
 import json
 import logging
 from datetime import datetime, timedelta
+import os
+from dateutil.relativedelta import relativedelta
 
 import requests
-from dateutil.relativedelta import relativedelta
 
 from ..definitions import ConsumptionData, ContractData, MaxPowerData, SupplyData
 from ..processors import utils
@@ -47,7 +48,8 @@ MAX_CONSUMPTIONS_MONTHS = 1
 
 QUERY_LIMIT = timedelta(hours=24)
 
-RECENT_QUERIES_FILE = "/tmp/edata_recent_queries.json"
+RECENT_QUERIES_FILENAME = "edata_recent_queries.json"
+RECENT_QUERIES_FILE = f"/tmp/{RECENT_QUERIES_FILENAME}"
 
 
 class DatadisConnector:
@@ -58,6 +60,7 @@ class DatadisConnector:
         username: str,
         password: str,
         enable_smart_fetch: bool = True,
+        storage_path: str | None = None,
     ) -> None:
         """Init method."""
 
@@ -67,10 +70,18 @@ class DatadisConnector:
         self._token = {}
         self._smart_fetch = enable_smart_fetch
 
+        if storage_path is not None:
+            self._recent_queries_file = os.path.join(
+                storage_path, RECENT_QUERIES_FILENAME
+            )
+            # TODO FIX this is not working after migration
+        else:
+            self._recent_queries_file = RECENT_QUERIES_FILE
+
         self._warned_queries = []
 
         try:
-            with open(RECENT_QUERIES_FILE, encoding="utf8") as dst_file:
+            with open(self._recent_queries_file, encoding="utf8") as dst_file:
                 self._recent_queries = json.load(dst_file)
                 for query in self._recent_queries:
                     self._recent_queries[query] = datetime.fromisoformat(
@@ -95,7 +106,7 @@ class DatadisConnector:
             self._recent_queries.pop(key, None)
 
         try:
-            with open(RECENT_QUERIES_FILE, "w", encoding="utf8") as dst_file:
+            with open(self._recent_queries_file, "w", encoding="utf8") as dst_file:
                 json.dump(utils.serialize_dict(self._recent_queries), dst_file)
         except Exception:
             pass

@@ -41,6 +41,14 @@ ATTRIBUTES = {
 }
 
 
+DEFAULT_BILLING_ENERGY_FORMULA = "electricity_tax * iva_tax * kwh_eur * kwh"
+DEFAULT_BILLING_POWER_FORMULA = "electricity_tax * iva_tax * (p1_kw * (p1_kw_year_eur + market_kw_year_eur) + p2_kw * p2_kw_year_eur) / 365 / 24"
+DEFAULT_BILLING_OTHERS_FORMULA = "iva_tax * meter_month_eur / 30 / 24"
+DEFAULT_BILLING_SURPLUS_FORMULA = (
+    "electricity_tax * iva_tax * [surplus_kwh, kwh]|min * surplus_kwh_eur"
+)
+
+
 class SupplyData(TypedDict):
     """Data structure to represent a supply."""
 
@@ -163,28 +171,38 @@ class PricingRules(TypedDict):
     market_kw_year_eur: float
     electricity_tax: float
     iva_tax: float
+    energy_formula: str | None
+    power_formula: str | None
+    others_formula: str | None
+    surplus_formula: str | None
+    cycle_start_day: int | None
 
 
 PricingRulesSchema = vol.Schema(
     {
         vol.Required("p1_kw_year_eur"): vol.Coerce(float),
         vol.Required("p2_kw_year_eur"): vol.Coerce(float),
-        vol.Required("p1_kwh_eur"): vol.Union(vol.Coerce(float), None),
-        vol.Required("p2_kwh_eur"): vol.Union(vol.Coerce(float), None),
-        vol.Required("p3_kwh_eur"): vol.Union(vol.Coerce(float), None),
-        vol.Optional("surplus_p1_kwh_eur", default=0): vol.Union(
+        vol.Optional("p1_kwh_eur", default=None): vol.Union(vol.Coerce(float), None),
+        vol.Optional("p2_kwh_eur", default=None): vol.Union(vol.Coerce(float), None),
+        vol.Optional("p3_kwh_eur", default=None): vol.Union(vol.Coerce(float), None),
+        vol.Optional("surplus_p1_kwh_eur", default=None): vol.Union(
             vol.Coerce(float), None
         ),
-        vol.Optional("surplus_p2_kwh_eur", default=0): vol.Union(
+        vol.Optional("surplus_p2_kwh_eur", default=None): vol.Union(
             vol.Coerce(float), None
         ),
-        vol.Optional("surplus_p3_kwh_eur", default=0): vol.Union(
+        vol.Optional("surplus_p3_kwh_eur", default=None): vol.Union(
             vol.Coerce(float), None
         ),
         vol.Required("meter_month_eur"): vol.Coerce(float),
         vol.Required("market_kw_year_eur"): vol.Coerce(float),
         vol.Required("electricity_tax"): vol.Coerce(float),
         vol.Required("iva_tax"): vol.Coerce(float),
+        vol.Optional("energy_formula", default=DEFAULT_BILLING_ENERGY_FORMULA): str,
+        vol.Optional("power_formula", default=DEFAULT_BILLING_POWER_FORMULA): str,
+        vol.Optional("others_formula", default=DEFAULT_BILLING_OTHERS_FORMULA): str,
+        vol.Optional("surplus_formula", default=DEFAULT_BILLING_SURPLUS_FORMULA): str,
+        vol.Optional("cycle_start_day", default=1): vol.Range(1, 30),
     }
 )
 
@@ -195,9 +213,6 @@ DEFAULT_PVPC_RULES = PricingRules(
     market_kw_year_eur=3.113,
     electricity_tax=1.0511300560,
     iva_tax=1.05,
-    p1_kwh_eur=None,
-    p2_kwh_eur=None,
-    p3_kwh_eur=None,
 )
 
 
@@ -278,10 +293,3 @@ EdataSchema = vol.Schema(
         vol.Optional("cost_monthly_sum", default=[]): [PricingAggSchema],
     }
 )
-
-
-def check_integrity(item: Iterable, definition: _TypedDictMeta):
-    """Check if an item follows a given definition."""
-    if all(k in item for k in definition.__required_keys__):
-        return True
-    return True

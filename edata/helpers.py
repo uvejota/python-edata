@@ -3,6 +3,8 @@
 import asyncio
 import logging
 from datetime import datetime, timedelta
+import contextlib
+import os
 
 import requests
 from dateutil.relativedelta import relativedelta
@@ -14,14 +16,12 @@ from .processors import utils
 from .processors.billing import (
     BillingInput,
     BillingProcessor,
-    DEFAULT_BILLING_ENERGY_FORMULA,
-    DEFAULT_BILLING_OTHERS_FORMULA,
-    DEFAULT_BILLING_POWER_FORMULA,
-    DEFAULT_BILLING_SURPLUS_FORMULA,
 )
 from .processors.consumption import ConsumptionProcessor
 from .processors.maximeter import MaximeterProcessor
 from .storage import check_storage_integrity, load_storage, dump_storage
+from . import const
+
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -38,10 +38,6 @@ class EdataHelper:
         cups: str,
         datadis_authorized_nif: str | None = None,
         pricing_rules: PricingRules | None = None,
-        billing_energy_formula: str = DEFAULT_BILLING_ENERGY_FORMULA,
-        billing_power_formula: str = DEFAULT_BILLING_POWER_FORMULA,
-        billing_others_formula: str = DEFAULT_BILLING_OTHERS_FORMULA,
-        billing_surplus_formula: str = DEFAULT_BILLING_SURPLUS_FORMULA,
         storage_dir_path: str | None = None,
         data: EdataData | None = None,
     ) -> None:
@@ -57,10 +53,6 @@ class EdataHelper:
             cost_daily_sum=[],
             cost_monthly_sum=[],
         )
-        self._billing_energy_formula = billing_energy_formula
-        self._billing_power_formula = billing_power_formula
-        self._billing_others_formula = billing_others_formula
-        self._billing_surplus_formula = billing_surplus_formula
 
         self.attributes = {}
         self._storage_dir = storage_dir_path
@@ -74,12 +66,9 @@ class EdataHelper:
         if data is not None:
             data = check_storage_integrity(data)
             self.data = data
-            self._must_dump = False
         else:
-            try:
+            with contextlib.suppress(Exception):
                 self.data = load_storage(self._cups, self._storage_dir)
-            except Exception:
-                pass
 
         for attr in ATTRIBUTES:
             self.attributes[attr] = None
@@ -87,6 +76,9 @@ class EdataHelper:
         self.datadis_api = DatadisConnector(
             datadis_username,
             datadis_password,
+            storage_path=os.path.join(storage_dir_path, const.PROG_NAME)
+            if storage_dir_path is not None
+            else None,
         )
         self.redata_api = REDataConnector()
 
@@ -441,7 +433,14 @@ class EdataHelper:
                 new_data_from = self._date_from
 
             proc = ConsumptionProcessor(
-                [x for x in self.data["consumptions"] if x["datetime"] >= new_data_from]
+                {
+                    "consumptions": [
+                        x
+                        for x in self.data["consumptions"]
+                        if x["datetime"] >= new_data_from
+                    ],
+                    "cycle_start_day": self.pricing_rules.get("cycle_start_day", 1),
+                }
             )
             today_starts = datetime(
                 datetime.today().year,
@@ -623,10 +622,6 @@ class EdataHelper:
                     if self.is_pvpc
                     else None,
                     rules=self.pricing_rules,
-                    energy_formula=self._billing_energy_formula,
-                    power_formula=self._billing_power_formula,
-                    others_formula=self._billing_others_formula,
-                    surplus_formula=self._billing_surplus_formula,
                 )
             )
             month_starts = datetime(
