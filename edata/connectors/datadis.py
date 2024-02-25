@@ -1,5 +1,13 @@
-"""Definitions for API connectors."""
+"""Datadis API connector.
 
+To fetch data from datadis.es private API.
+There a few issues that are workarounded:
+ - You have to wait 24h between two identical requests.
+ - Datadis server does not like ranges greater than 1 month.
+ - TODO: gzip header checksum errors under weird circumstances
+"""
+
+import contextlib
 import hashlib
 import json
 import logging
@@ -14,9 +22,12 @@ from ..processors import utils
 
 _LOGGER = logging.getLogger(__name__)
 
+# Token-related constants
 URL_TOKEN = "https://datadis.es/nikola-auth/tokens/login"
 TOKEN_USERNAME = "username"
 TOKEN_PASSWD = "password"
+
+# Supplies-related constants
 URL_GET_SUPPLIES = "https://datadis.es/api-private/api/get-supplies"
 GET_SUPPLIES_MANDATORY_FIELDS = [
     "cups",
@@ -25,6 +36,8 @@ GET_SUPPLIES_MANDATORY_FIELDS = [
     "pointType",
     "distributorCode",
 ]
+
+# Contracts-related constants
 URL_GET_CONTRACT_DETAIL = "https://datadis.es/api-private/api/get-contract-detail"
 GET_CONTRACT_DETAIL_MANDATORY_FIELDS = [
     "startDate",
@@ -32,6 +45,8 @@ GET_CONTRACT_DETAIL_MANDATORY_FIELDS = [
     "marketer",
     "contractedPowerkW",
 ]
+
+# Consumption-related constants
 URL_GET_CONSUMPTION_DATA = "https://datadis.es/api-private/api/get-consumption-data"
 GET_CONSUMPTION_DATA_MANDATORY_FIELDS = [
     "time",
@@ -39,17 +54,23 @@ GET_CONSUMPTION_DATA_MANDATORY_FIELDS = [
     "consumptionKWh",
     "obtainMethod",
 ]
+MAX_CONSUMPTIONS_MONTHS = (
+    1  # max consumptions in a single request (fixed to 1 due to datadis limitations)
+)
+
+# Maximeter-related constants
 URL_GET_MAX_POWER = "https://datadis.es/api-private/api/get-max-power"
 GET_MAX_POWER_MANDATORY_FIELDS = ["time", "date", "maxPower"]
 
-TIMEOUT = 3 * 60
+# Timing constants
+TIMEOUT = 3 * 60  # requests timeout
+QUERY_LIMIT = timedelta(hours=24)  # a datadis limitation, again...
 
-MAX_CONSUMPTIONS_MONTHS = 1
-
-QUERY_LIMIT = timedelta(hours=24)
-
+# Cache-related constants
 RECENT_QUERIES_FILENAME = "edata_recent_queries.json"
-RECENT_QUERIES_FILE = f"/tmp/{RECENT_QUERIES_FILENAME}"
+RECENT_QUERIES_CACHE_FILENAME = "edata_recent_queries_cache.json"
+DEFAULT_RECENT_QUERIES_FILE = f"/tmp/{RECENT_QUERIES_FILENAME}"
+DEFAULT_RECENT_QUERIES_CACHE = f"/tmp/{RECENT_QUERIES_CACHE_FILENAME}"
 
 
 class DatadisConnector:
@@ -62,54 +83,71 @@ class DatadisConnector:
         enable_smart_fetch: bool = True,
         storage_path: str | None = None,
     ) -> None:
-        """Init method."""
+        """DatadisConnector constructor."""
 
+        # initialize some things
         self._usr = username
         self._pwd = password
         self._session = requests.Session()
         self._token = {}
         self._smart_fetch = enable_smart_fetch
-
+        self._recent_queries = {}
+        self._recent_cache = {}
         if storage_path is not None:
             self._recent_queries_file = os.path.join(
                 storage_path, RECENT_QUERIES_FILENAME
             )
-            # TODO FIX this is not working after migration
+            self._recent_queries_cache_file = os.path.join(
+                storage_path, RECENT_QUERIES_CACHE_FILENAME
+            )
         else:
-            self._recent_queries_file = RECENT_QUERIES_FILE
-
+            self._recent_queries_file = DEFAULT_RECENT_QUERIES_FILE
+            self._recent_queries_cache_file = DEFAULT_RECENT_QUERIES_CACHE
         self._warned_queries = []
 
-        try:
+        # load caches (to avoid query spam if the program restarts)
+        with contextlib.suppress(FileNotFoundError):
             with open(self._recent_queries_file, encoding="utf8") as dst_file:
                 self._recent_queries = json.load(dst_file)
                 for query in self._recent_queries:
                     self._recent_queries[query] = datetime.fromisoformat(
                         self._recent_queries[query]
                     )
-        except FileNotFoundError:
-            self._recent_queries = {}
+            with open(self._recent_queries_cache_file, encoding="utf8") as dst_file:
+                self._recent_cache = json.load(dst_file)
 
-    def _update_recent_queries(self, query: str) -> None:
-        """Record a recent successful query to avoid exceeding query limits."""
+    def _update_recent_queries(self, query: str, data: dict | None = None) -> None:
+        """Cache a successful query to avoid exceeding query limits."""
 
+        # identify the query by a md5 hash
         hash_query = hashlib.md5(query.encode()).hexdigest()
+        # prepare key (hash) and values (timestamp and response)
         self._recent_queries[hash_query] = datetime.now()
+        if data is not None:
+            self._recent_cache[hash_query] = data
 
-        # purge old queries
+        # purge old cache
         to_delete = []
         for _query in self._recent_queries:
             if (datetime.now() - self._recent_queries[_query]) > QUERY_LIMIT:
                 to_delete.append(_query)
 
         for key in to_delete:
-            self._recent_queries.pop(key, None)
+            with contextlib.suppress(KeyError):
+                self._recent_queries.pop(key, None)
+                self._recent_cache.pop(key, None)
 
+        # dump current cache to disk
         try:
             with open(self._recent_queries_file, "w", encoding="utf8") as dst_file:
                 json.dump(utils.serialize_dict(self._recent_queries), dst_file)
-        except Exception:
-            pass
+            if data is not None:
+                with open(
+                    self._recent_queries_cache_file, "w", encoding="utf8"
+                ) as dst_file:
+                    json.dump(self._recent_cache, dst_file)
+        except Exception as e:
+            _LOGGER.warning("Unknown error while updating cache: %s", e)
 
     def _is_recent_query(self, query: str) -> bool:
         """Check if a query has been done recently to avoid exceeding query limits."""
@@ -118,6 +156,12 @@ class DatadisConnector:
         if hash_query in self._recent_queries:
             return (datetime.now() - self._recent_queries[hash_query]) < QUERY_LIMIT
         return False
+
+    def _get_cache_for_query(self, query: str) -> dict:
+        """Return cached response for a query."""
+        hash_query = hashlib.md5(query.encode()).hexdigest()
+
+        return self._recent_cache.get(hash_query, None)
 
     def _get_token(self):
         """Private method that fetches a new token if needed."""
@@ -137,7 +181,6 @@ class DatadisConnector:
             self._token["encoded"] = response.text
             # prepare session authorization bearer
             self._session.headers["Authorization"] = "Bearer " + self._token["encoded"]
-            _LOGGER.debug("token received")
             is_valid_token = True
         else:
             _LOGGER.error("Unknown error while retrieving token, got %s", response.text)
@@ -174,24 +217,31 @@ class DatadisConnector:
                 key = param
                 value = data[param]
                 params = params + f"{key}={value}&"
-            # query
 
+            # check if query is already in cache
             if not ignore_recent_queries and self._is_recent_query(url + params):
-                return response
+                _cache = self._get_cache_for_query(url + params)
+                if _cache is not None:
+                    return _cache
+                return []
 
+            # run the query
             try:
-                _LOGGER.info("GET %s", url + params)
+                _LOGGER.debug("GET %s", url + params)
                 reply = self._session.get(url + params, timeout=TIMEOUT)
             except requests.exceptions.Timeout:
                 _LOGGER.warning("Timeout at %s", url + params)
-                return response
+                return []
 
             # eval response
             if reply.status_code == 200 and reply.json():
+                # we're here if reply seems valid
                 _LOGGER.info("Got 200 OK at %s", url + params)
                 response = reply.json()
-                self._update_recent_queries(url + params)
+                self._update_recent_queries(url + params, response)
+
             elif reply.status_code == 401 and not refresh_token:
+                # we're here if we were unauthorized so we will refresh the token
                 response = self._send_cmd(
                     url,
                     request_data=data,
@@ -199,6 +249,7 @@ class DatadisConnector:
                     ignore_recent_queries=ignore_recent_queries,
                 )
             elif reply.status_code == 429:
+                # we're here if we exceeded datadis API rates (24h)
                 _LOGGER.warning(
                     "%s %s at %s",
                     reply.status_code,
@@ -207,11 +258,12 @@ class DatadisConnector:
                 )
                 self._update_recent_queries(url + params)
             elif reply.status_code == 200:
-                _LOGGER.info(
-                    "%s returned an empty response, try again later", url + params
-                )
+                # we're here if we got a 200 OK, but response.json() failed
+                # this mostly happens when datadis provides an empty response
+                _LOGGER.info("Datadis returned an empty response at %s", url + params)
                 self._update_recent_queries(url + params)
             elif is_retry:
+                # otherwise, if this was a retried request... warn the user
                 if (url + params) not in self._warned_queries:
                     _LOGGER.warning(
                         "%s %s at %s. %s. %s",
@@ -224,7 +276,14 @@ class DatadisConnector:
                 self._update_recent_queries(url + params)
                 self._warned_queries.append(url + params)
             else:
-                self._send_cmd(url, request_data, is_retry=True)
+                # finally, retry since an unexpected error took place (mostly 500 errors - server fault)
+                response = self._send_cmd(
+                    url,
+                    request_data,
+                    is_retry=True,
+                    ignore_recent_queries=ignore_recent_queries,
+                )
+
         return response
 
     def get_supplies(self, authorized_nif: str | None = None):
