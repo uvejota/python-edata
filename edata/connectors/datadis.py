@@ -190,7 +190,7 @@ class DatadisConnector:
         """Test to login with provided credentials."""
         return self._get_token()
 
-    def _send_cmd(
+    def _get(
         self,
         url: str,
         request_data: dict | None = None,
@@ -198,7 +198,7 @@ class DatadisConnector:
         is_retry: bool = False,
         ignore_recent_queries: bool = False,
     ):
-        """Common method for GET requests."""
+        """Get request for Datadis API."""
 
         if request_data is None:
             data = {}
@@ -228,21 +228,31 @@ class DatadisConnector:
             # run the query
             try:
                 _LOGGER.debug("GET %s", url + params)
-                reply = self._session.get(url + params, timeout=TIMEOUT)
+                reply = self._session.get(
+                    url + params,
+                    headers={"Accept-Encoding": "identity"},
+                    timeout=TIMEOUT,
+                )
             except requests.exceptions.Timeout:
                 _LOGGER.warning("Timeout at %s", url + params)
                 return []
 
             # eval response
-            if reply.status_code == 200 and reply.json():
+            if reply.status_code == 200:
                 # we're here if reply seems valid
                 _LOGGER.info("Got 200 OK at %s", url + params)
-                response = reply.json()
-                self._update_recent_queries(url + params, response)
-
+                if reply.json():
+                    response = reply.json()
+                    self._update_recent_queries(url + params, response)
+                else:
+                    # this mostly happens when datadis provides an empty response
+                    _LOGGER.info(
+                        "Datadis returned an empty response at %s", url + params
+                    )
+                    self._update_recent_queries(url + params)
             elif reply.status_code == 401 and not refresh_token:
                 # we're here if we were unauthorized so we will refresh the token
-                response = self._send_cmd(
+                response = self._get(
                     url,
                     request_data=data,
                     refresh_token=True,
@@ -256,11 +266,6 @@ class DatadisConnector:
                     reply.text,
                     url + params,
                 )
-                self._update_recent_queries(url + params)
-            elif reply.status_code == 200:
-                # we're here if we got a 200 OK, but response.json() failed
-                # this mostly happens when datadis provides an empty response
-                _LOGGER.info("Datadis returned an empty response at %s", url + params)
                 self._update_recent_queries(url + params)
             elif is_retry:
                 # otherwise, if this was a retried request... warn the user
@@ -277,7 +282,7 @@ class DatadisConnector:
                 self._warned_queries.append(url + params)
             else:
                 # finally, retry since an unexpected error took place (mostly 500 errors - server fault)
-                response = self._send_cmd(
+                response = self._get(
                     url,
                     request_data,
                     is_retry=True,
@@ -287,37 +292,50 @@ class DatadisConnector:
         return response
 
     def get_supplies(self, authorized_nif: str | None = None):
-        """Datadis get_supplies query."""
+        """Datadis 'get_supplies' query."""
+
         data = {}
+
+        # If authorized_nif is provided, we have to include it as parameter
         if authorized_nif is not None:
             data["authorizedNif"] = authorized_nif
-        response = self._send_cmd(
+
+        # Request the resource
+        response = self._get(
             URL_GET_SUPPLIES, request_data=data, ignore_recent_queries=False
         )
+
+        # Response is a list of serialized supplies.
+        # We will iter through them to transform them into SupplyData objects
         supplies = []
+        # Build tomorrow Y/m/d string since we will use it as the 'date_end' of
+        # active supplies
         tomorrow_str = (datetime.today() + timedelta(days=1)).strftime("%Y/%m/%d")
         for i in response:
+            # check data integrity (maybe this can be supressed if datadis proves to be reliable)
             if all(k in i for k in GET_SUPPLIES_MANDATORY_FIELDS):
                 supplies.append(
                     SupplyData(
-                        cups=i["cups"],
+                        cups=i["cups"],  # the supply identifier
                         date_start=datetime.strptime(
                             i["validDateFrom"]
                             if i["validDateFrom"] != ""
                             else "1970/01/01",
                             "%Y/%m/%d",
-                        ),
+                        ),  # start date of the supply. 1970/01/01 if unset.
                         date_end=datetime.strptime(
                             i["validDateTo"]
                             if i["validDateTo"] != ""
                             else tomorrow_str,
                             "%Y/%m/%d",
-                        ),
+                        ),  # end date of the supply, tomorrow if unset
+                        # the following parameters are not crucial, so they can be none
                         address=i["address"] if "address" in i else None,
                         postal_code=i["postalCode"] if "postalCode" in i else None,
                         province=i["province"] if "province" in i else None,
                         municipality=i["municipality"] if "municipality" in i else None,
                         distributor=i["distributor"] if "distributor" in i else None,
+                        # these two are mandatory, we will use them to fetch contracts data
                         pointType=i["pointType"],
                         distributorCode=i["distributorCode"],
                     )
@@ -336,7 +354,7 @@ class DatadisConnector:
         data = {"cups": cups, "distributorCode": distributor_code}
         if authorized_nif is not None:
             data["authorizedNif"] = authorized_nif
-        response = self._send_cmd(
+        response = self._get(
             URL_GET_CONTRACT_DETAIL, request_data=data, ignore_recent_queries=False
         )
         contracts = []
@@ -418,7 +436,7 @@ class DatadisConnector:
         if authorized_nif is not None:
             data["authorizedNif"] = authorized_nif
 
-        response = self._send_cmd(URL_GET_CONSUMPTION_DATA, request_data=data)
+        response = self._get(URL_GET_CONSUMPTION_DATA, request_data=data)
 
         consumptions = []
         for i in response:
@@ -464,7 +482,7 @@ class DatadisConnector:
         }
         if authorized_nif is not None:
             data["authorizedNif"] = authorized_nif
-        response = self._send_cmd(URL_GET_MAX_POWER, request_data=data)
+        response = self._get(URL_GET_MAX_POWER, request_data=data)
         maxpower_values = []
         for i in response:
             if all(k in i for k in GET_MAX_POWER_MANDATORY_FIELDS):

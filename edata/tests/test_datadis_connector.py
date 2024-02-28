@@ -122,7 +122,7 @@ MAXIMETER_EXPECTATIONS = [
 
 @pytest.mark.order(1)
 @patch.object(DatadisConnector, "_get_token", MagicMock(return_value=True))
-@patch.object(DatadisConnector, "_send_cmd", MagicMock(return_value=SUPPLIES_RESPONSE))
+@patch.object(DatadisConnector, "_get", MagicMock(return_value=SUPPLIES_RESPONSE))
 def test_get_supplies():
     """Test a successful 'get_supplies' query."""
     connector = DatadisConnector(MOCK_USERNAME, MOCK_PASSWORD)
@@ -131,7 +131,7 @@ def test_get_supplies():
 
 @pytest.mark.order(2)
 @patch.object(DatadisConnector, "_get_token", MagicMock(return_value=True))
-@patch.object(DatadisConnector, "_send_cmd", MagicMock(return_value=CONTRACTS_RESPONSE))
+@patch.object(DatadisConnector, "_get", MagicMock(return_value=CONTRACTS_RESPONSE))
 def test_get_contract_detail():
     """Test a successful 'get_contract_detail' query."""
     connector = DatadisConnector(MOCK_USERNAME, MOCK_PASSWORD)
@@ -143,9 +143,7 @@ def test_get_contract_detail():
 
 @pytest.mark.order(3)
 @patch.object(DatadisConnector, "_get_token", MagicMock(return_value=True))
-@patch.object(
-    DatadisConnector, "_send_cmd", MagicMock(return_value=CONSUMPTIONS_RESPONSE)
-)
+@patch.object(DatadisConnector, "_get", MagicMock(return_value=CONSUMPTIONS_RESPONSE))
 def test_get_consumption_data():
     """Test a successful 'get_consumption_data' query."""
     connector = DatadisConnector(MOCK_USERNAME, MOCK_PASSWORD)
@@ -164,7 +162,7 @@ def test_get_consumption_data():
 
 @pytest.mark.order(4)
 @patch.object(DatadisConnector, "_get_token", MagicMock(return_value=True))
-@patch.object(DatadisConnector, "_send_cmd", MagicMock(return_value=MAXIMETER_RESPONSE))
+@patch.object(DatadisConnector, "_get", MagicMock(return_value=MAXIMETER_RESPONSE))
 def test_get_max_power():
     """Test a successful 'get_max_power' query."""
     connector = DatadisConnector(MOCK_USERNAME, MOCK_PASSWORD)
