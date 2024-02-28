@@ -169,52 +169,60 @@ class DatadisConnector:
                 return response
 
             try:
-                _LOGGER.info("GET %s", url + params)
-                reply = self._session.get(url + params, timeout=TIMEOUT)
-            except requests.exceptions.Timeout:
-                _LOGGER.warning("Timeout at %s", url + params)
-                return response
+                try:
+                    _LOGGER.info("GET %s", url + params)
+                    reply = self._session.get(url + params, timeout=TIMEOUT)
+                except requests.exceptions.Timeout:
+                    _LOGGER.warning("Timeout at %s", url + params)
+                    return response
 
-            # eval response
-            if reply.status_code == 200 and reply.json():
-                _LOGGER.info("Got 200 OK at %s", url + params)
-                response = reply.json()
-                self._update_recent_queries(url + params)
-            elif reply.status_code == 401 and not refresh_token:
-                response = self._send_cmd(
-                    url,
-                    request_data=data,
-                    refresh_token=True,
-                    ignore_recent_queries=ignore_recent_queries,
-                )
-            elif reply.status_code == 429:
-                _LOGGER.warning(
-                    "%s %s at %s",
-                    reply.status_code,
-                    reply.text,
-                    url + params,
-                )
-                self._update_recent_queries(url + params)
-            elif reply.status_code == 200:
-                _LOGGER.info(
-                    "%s returned an empty response, try again later", url + params
-                )
-                self._update_recent_queries(url + params)
-            else:
-                if is_retry:
-                    if (url + params) not in self._warned_queries:
-                        _LOGGER.warning(
-                            "%s %s at %s. %s. %s",
-                            reply.status_code,
-                            reply.text,
-                            url + params,
-                            "Query temporary disabled",
-                            "Future 500 code errors for this query will be silenced until restart",
-                        )
+                # eval response
+                if reply.status_code == 200 and reply.json():
+                    _LOGGER.info("Got 200 OK at %s", url + params)
+                    response = reply.json()
                     self._update_recent_queries(url + params)
-                    self._warned_queries.append(url + params)
+                elif reply.status_code == 401 and not refresh_token:
+                    response = self._send_cmd(
+                        url,
+                        request_data=data,
+                        refresh_token=True,
+                        ignore_recent_queries=ignore_recent_queries,
+                    )
+                elif reply.status_code == 429:
+                    _LOGGER.warning(
+                        "%s %s at %s",
+                        reply.status_code,
+                        reply.text,
+                        url + params,
+                    )
+                    self._update_recent_queries(url + params)
+                elif reply.status_code == 200:
+                    _LOGGER.info(
+                        "%s returned an empty response, try again later", url + params
+                    )
+                    self._update_recent_queries(url + params)
                 else:
-                    self._send_cmd(url, request_data, is_retry=True)
+                    if is_retry:
+                        if (url + params) not in self._warned_queries:
+                            _LOGGER.warning(
+                                "%s %s at %s. %s. %s",
+                                reply.status_code,
+                                reply.text,
+                                url + params,
+                                "Query temporary disabled",
+                                "Future 500 code errors for this query will be silenced until restart",
+                            )
+                        self._update_recent_queries(url + params)
+                        self._warned_queries.append(url + params)
+                    else:
+                        return self._send_cmd(url, request_data, is_retry=True)
+            except Exception as e:
+                try:
+                    _LOGGER.warning("Exception %s at '%s'. Got %s", e, url, response.raw.read())
+                except Exception:
+                    _LOGGER.warning("Exception %s at '%s'", e, url)
+                self._update_recent_queries(url + params)
+                return []
         return response
 
     def get_supplies(self, authorized_nif: str | None = None):
