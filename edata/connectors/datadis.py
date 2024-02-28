@@ -171,7 +171,11 @@ class DatadisConnector:
             try:
                 try:
                     _LOGGER.info("GET %s", url + params)
-                    reply = self._session.get(url + params, timeout=TIMEOUT)
+                    reply = self._session.get(
+                        url + params,
+                        headers={"Accept-Encoding": "identity"},
+                        timeout=TIMEOUT,
+                    )
                 except requests.exceptions.Timeout:
                     _LOGGER.warning("Timeout at %s", url + params)
                     return response
@@ -218,7 +222,9 @@ class DatadisConnector:
                         return self._send_cmd(url, request_data, is_retry=True)
             except Exception as e:
                 try:
-                    _LOGGER.warning("Exception %s at '%s'. Got %s", e, url, response.raw.read())
+                    _LOGGER.warning(
+                        "Exception %s at '%s'. Got %s", e, url, response.raw.read()
+                    )
                 except Exception:
                     _LOGGER.warning("Exception %s at '%s'", e, url)
                 self._update_recent_queries(url + params)
