@@ -277,7 +277,7 @@ class EdataHelper:
             # update consumptions
             for gap in [
                 x
-                for x in miss_cons
+                for x in reversed(miss_cons)
                 if not (
                     x["to"] < contract["date_start"] or x["from"] > contract["date_end"]
                 )
