@@ -448,12 +448,15 @@ class DatadisConnector:
                     )
                     if not (start_date <= date_as_dt <= end_date):
                         continue  # skip element if dt is out of range
+                    _surplus = i.get("surplusEnergyKWh", 0)
+                    if _surplus is None:
+                        _surplus = 0
                     consumptions.append(
                         ConsumptionData(
                             datetime=date_as_dt,
                             delta_h=1,
                             value_kWh=i["consumptionKWh"],
-                            surplus_kWh=i.get("surplusEnergyKWh", 0),
+                            surplus_kWh=_surplus,
                             real=i["obtainMethod"] == "Real",
                         )
                     )
