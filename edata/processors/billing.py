@@ -1,4 +1,4 @@
-"""Billing data processors"""
+"""Billing data processors."""
 
 import logging
 from datetime import datetime, timedelta
@@ -26,7 +26,7 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class BillingOutput(TypedDict):
-    """A dict holding BillingProcessor output property"""
+    """A dict holding BillingProcessor output property."""
 
     hourly: list[PricingAggData]
     daily: list[PricingAggData]
@@ -34,7 +34,7 @@ class BillingOutput(TypedDict):
 
 
 class BillingInput(TypedDict):
-    """A dict holding BillingProcessor input data"""
+    """A dict holding BillingProcessor input data."""
 
     contracts: list[ContractData]
     consumptions: list[ConsumptionData]
@@ -43,10 +43,10 @@ class BillingInput(TypedDict):
 
 
 class BillingProcessor(Processor):
-    """A billing processor for edata"""
+    """A billing processor for edata."""
 
     def do_process(self):
-        """Main method for the BillingProcessor"""
+        """Main method for the BillingProcessor."""
         self._output = BillingOutput(hourly=[], daily=[], monthly=[])
 
         _schema = voluptuous.Schema(

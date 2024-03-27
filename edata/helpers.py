@@ -479,15 +479,23 @@ class EdataHelper:
             self.attributes["yesterday_kWh"] = (
                 yday.get("value_kWh", None) if yday is not None else None
             )
-            self.attributes["yesterday_p1_kWh"] = (
-                yday.get("value_p1_kWh", None) if yday is not None else None
+
+            for tariff in (1, 2, 3):
+                self.attributes[f"yesterday_p{tariff}_kWh"] = (
+                    yday.get(f"value_p{tariff}_kWh", None) if yday is not None else None
+                )
+
+            self.attributes["yesterday_surplus_kWh"] = (
+                yday.get("surplus_kWh", None) if yday is not None else None
             )
-            self.attributes["yesterday_p2_kWh"] = (
-                yday.get("value_p2_kWh", None) if yday is not None else None
-            )
-            self.attributes["yesterday_p3_kWh"] = (
-                yday.get("value_p3_kWh", None) if yday is not None else None
-            )
+
+            for tariff in (1, 2, 3):
+                self.attributes[f"yesterday_surplus_p{tariff}_kWh"] = (
+                    yday.get(f"surplus_p{tariff}_kWh", None)
+                    if yday is not None
+                    else None
+                )
+
             self.attributes["yesterday_hours"] = (
                 yday.get("delta_h", None) if yday is not None else None
             )
@@ -497,6 +505,9 @@ class EdataHelper:
             )
             self.attributes["month_kWh"] = (
                 month.get("value_kWh", None) if month is not None else None
+            )
+            self.attributes["month_surplus_kWh"] = (
+                month.get("surplus_kWh", None) if month is not None else None
             )
             self.attributes["month_days"] = (
                 month.get("delta_h", 0) / 24 if month is not None else None
@@ -510,15 +521,13 @@ class EdataHelper:
                 if month is not None
                 else None
             )
-            self.attributes["month_p1_kWh"] = (
-                month.get("value_p1_kWh", None) if month is not None else None
-            )
-            self.attributes["month_p2_kWh"] = (
-                month.get("value_p2_kWh", None) if month is not None else None
-            )
-            self.attributes["month_p3_kWh"] = (
-                month.get("value_p3_kWh", None) if month is not None else None
-            )
+
+            for tariff in (1, 2, 3):
+                self.attributes[f"month_surplus_p{tariff}_kWh"] = (
+                    month.get(f"surplus_p{tariff}_kWh", None)
+                    if month is not None
+                    else None
+                )
 
             last_month = utils.get_by_key(
                 self.data["consumptions_monthly_sum"],
@@ -527,6 +536,9 @@ class EdataHelper:
             )
             self.attributes["last_month_kWh"] = (
                 last_month.get("value_kWh", None) if last_month is not None else None
+            )
+            self.attributes["last_month_surplus_kWh"] = (
+                last_month.get("surplus_kWh", None) if last_month is not None else None
             )
             self.attributes["last_month_days"] = (
                 last_month.get("delta_h", 0) / 24 if last_month is not None else None
@@ -543,15 +555,18 @@ class EdataHelper:
                 if last_month is not None
                 else None
             )
-            self.attributes["last_month_p1_kWh"] = (
-                last_month.get("value_p1_kWh", None) if last_month is not None else None
-            )
-            self.attributes["last_month_p2_kWh"] = (
-                last_month.get("value_p2_kWh", None) if last_month is not None else None
-            )
-            self.attributes["last_month_p3_kWh"] = (
-                last_month.get("value_p3_kWh", None) if last_month is not None else None
-            )
+            for tariff in (1, 2, 3):
+                self.attributes[f"last_month_p{tariff}_kWh"] = (
+                    last_month.get(f"value_p{tariff}_kWh", None)
+                    if last_month is not None
+                    else None
+                )
+            for tariff in (1, 2, 3):
+                self.attributes[f"last_month_surplus_p{tariff}_kWh"] = (
+                    last_month.get(f"surplus_p{tariff}_kWh", None)
+                    if last_month is not None
+                    else None
+                )
 
             if len(self.data["consumptions"]) > 0:
                 self.attributes["last_registered_date"] = self.data["consumptions"][-1][
@@ -565,21 +580,21 @@ class EdataHelper:
                         if last_day is not None
                         else None
                     )
-                    self.attributes["last_registered_day_p1_kWh"] = (
-                        last_day.get("value_p1_kWh", None)
+                    self.attributes["last_registered_day_surplus_kWh"] = (
+                        last_day.get("surplus_kWh", None)
                         if last_day is not None
                         else None
                     )
-                    self.attributes["last_registered_day_p2_kWh"] = (
-                        last_day.get("value_p2_kWh", None)
-                        if last_day is not None
-                        else None
-                    )
-                    self.attributes["last_registered_day_p3_kWh"] = (
-                        last_day.get("value_p3_kWh", None)
-                        if last_day is not None
-                        else None
-                    )
+
+                    for tariff in (1, 2, 3):
+                        self.attributes[
+                            f"last_registered_day_surplus_p{tariff}_kWh"
+                        ] = (
+                            last_day.get(f"surplus_p{tariff}_kWh", None)
+                            if last_day is not None
+                            else None
+                        )
+
                     self.attributes["last_registered_day_hours"] = (
                         last_day.get("delta_h", None) if last_day is not None else None
                     )

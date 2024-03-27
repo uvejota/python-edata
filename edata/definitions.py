@@ -14,18 +14,30 @@ ATTRIBUTES = {
     "yesterday_p1_kWh": "kWh",
     "yesterday_p2_kWh": "kWh",
     "yesterday_p3_kWh": "kWh",
+    "yesterday_surplus_kWh": "kWh",
+    "yesterday_surplus_p1_kWh": "kWh",
+    "yesterday_surplus_p2_kWh": "kWh",
+    "yesterday_surplus_p3_kWh": "kWh",
     "last_registered_date": None,
     "last_registered_day_kWh": "kWh",
     "last_registered_day_hours": "h",
     "last_registered_day_p1_kWh": "kWh",
     "last_registered_day_p2_kWh": "kWh",
     "last_registered_day_p3_kWh": "kWh",
+    "last_registered_day_surplus_kWh": "kWh",
+    "last_registered_day_surplus_p1_kWh": "kWh",
+    "last_registered_day_surplus_p2_kWh": "kWh",
+    "last_registered_day_surplus_p3_kWh": "kWh",
     "month_kWh": "kWh",
     "month_daily_kWh": "kWh",
     "month_days": "d",
     "month_p1_kWh": "kWh",
     "month_p2_kWh": "kWh",
     "month_p3_kWh": "kWh",
+    "month_surplus_kWh": "kWh",
+    "month_surplus_p1_kWh": "kWh",
+    "month_surplus_p2_kWh": "kWh",
+    "month_surplus_p3_kWh": "kWh",
     "month_€": "€",
     "last_month_kWh": "kWh",
     "last_month_daily_kWh": "kWh",
@@ -33,6 +45,10 @@ ATTRIBUTES = {
     "last_month_p1_kWh": "kWh",
     "last_month_p2_kWh": "kWh",
     "last_month_p3_kWh": "kWh",
+    "last_month_surplus_kWh": "kWh",
+    "last_month_surplus_p1_kWh": "kWh",
+    "last_month_surplus_p2_kWh": "kWh",
+    "last_month_surplus_p3_kWh": "kWh",
     "last_month_€": "€",
     "max_power_kW": "kW",
     "max_power_date": None,
@@ -118,7 +134,7 @@ ConsumptionSchema = vol.Schema(
         vol.Required("datetime"): dt.datetime,
         vol.Required("delta_h"): vol.Coerce(float),
         vol.Required("value_kWh"): vol.Coerce(float),
-        vol.Optional("surplus_kWh", default=0): vol.Union(vol.Coerce(float), None),
+        vol.Optional("surplus_kWh", default=0): vol.Coerce(float),
         vol.Required("real"): bool,
     }
 )
@@ -224,6 +240,10 @@ class ConsumptionAggData(TypedDict):
     value_p1_kWh: float
     value_p2_kWh: float
     value_p3_kWh: float
+    surplus_kWh: float
+    surplus_p1_kWh: float
+    surplus_p2_kWh: float
+    surplus_p3_kWh: float
     delta_h: float
 
 
@@ -234,6 +254,10 @@ ConsumptionAggSchema = vol.Schema(
         vol.Required("value_p1_kWh"): vol.Coerce(float),
         vol.Required("value_p2_kWh"): vol.Coerce(float),
         vol.Required("value_p3_kWh"): vol.Coerce(float),
+        vol.Optional("surplus_kWh", default=0): vol.Coerce(float),
+        vol.Optional("surplus_p1_kWh", default=0): vol.Coerce(float),
+        vol.Optional("surplus_p2_kWh", default=0): vol.Coerce(float),
+        vol.Optional("surplus_p3_kWh", default=0): vol.Coerce(float),
         vol.Required("delta_h"): vol.Coerce(float),
     }
 )
