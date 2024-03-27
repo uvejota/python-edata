@@ -1,27 +1,23 @@
 """A module for edata helpers."""
 
 import asyncio
-import logging
-from datetime import datetime, timedelta
 import contextlib
+from datetime import datetime, timedelta
+import logging
 import os
 
-import requests
 from dateutil.relativedelta import relativedelta
+import requests
 
+from . import const
 from .connectors.datadis import DatadisConnector
 from .connectors.redata import REDataConnector
 from .definitions import ATTRIBUTES, EdataData, PricingRules
 from .processors import utils
-from .processors.billing import (
-    BillingInput,
-    BillingProcessor,
-)
+from .processors.billing import BillingInput, BillingProcessor
 from .processors.consumption import ConsumptionProcessor
 from .processors.maximeter import MaximeterProcessor
-from .storage import check_storage_integrity, load_storage, dump_storage
-from . import const
-
+from .storage import check_storage_integrity, dump_storage, load_storage
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -523,6 +519,11 @@ class EdataHelper:
             )
 
             for tariff in (1, 2, 3):
+                self.attributes[f"month_p{tariff}_kWh"] = (
+                    month.get(f"value_p{tariff}_kWh", None)
+                    if month is not None
+                    else None
+                )
                 self.attributes[f"month_surplus_p{tariff}_kWh"] = (
                     month.get(f"surplus_p{tariff}_kWh", None)
                     if month is not None
@@ -561,7 +562,6 @@ class EdataHelper:
                     if last_month is not None
                     else None
                 )
-            for tariff in (1, 2, 3):
                 self.attributes[f"last_month_surplus_p{tariff}_kWh"] = (
                     last_month.get(f"surplus_p{tariff}_kWh", None)
                     if last_month is not None
@@ -587,6 +587,12 @@ class EdataHelper:
                     )
 
                     for tariff in (1, 2, 3):
+                        self.attributes[f"last_registered_day_p{tariff}_kWh"] = (
+                            last_day.get(f"value_p{tariff}_kWh", None)
+                            if last_day is not None
+                            else None
+                        )
+
                         self.attributes[
                             f"last_registered_day_surplus_p{tariff}_kWh"
                         ] = (
