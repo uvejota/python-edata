@@ -746,3 +746,24 @@ class EdataHelper:
 
             if last_month is not None:
                 self.attributes["last_month_€"] = last_month.get("value_eur", None)
+
+    def reset(self):
+        """Reset in-mem objects."""
+
+        self.data = EdataData(
+            supplies=[],
+            contracts=[],
+            consumptions=[],
+            maximeter=[],
+            pvpc=[],
+            consumptions_daily_sum=[],
+            consumptions_monthly_sum=[],
+            cost_hourly_sum=[],
+            cost_daily_sum=[],
+            cost_monthly_sum=[],
+        )
+
+        for attr in ATTRIBUTES:
+            self.attributes[attr] = None
+
+        self.last_update = {x: datetime(1970, 1, 1) for x in self.data}

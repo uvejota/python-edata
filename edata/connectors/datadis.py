@@ -160,7 +160,7 @@ class DatadisConnector:
         try:
             with open(cache_file, encoding="utf8") as cache:
                 return json.load(cache)
-        except FileNotFoundError:
+        except (FileNotFoundError, json.decoder.JSONDecodeError):
             return None
 
     def _get_token(self):
@@ -234,7 +234,9 @@ class DatadisConnector:
             if not ignore_recent_queries and self._is_recent_query(url + params):
                 _cache = self._get_cache_for_query(url + params)
                 if _cache is not None:
-                    _LOGGER.info("Returning cached data")
+                    _LOGGER.info(
+                        "Returning cached response for '%s'", url + anonym_params
+                    )
                     return _cache
                 return []
 
