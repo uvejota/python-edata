@@ -107,11 +107,31 @@ class EdataHelper:
         self,
         date_from: datetime = datetime(1970, 1, 1),
         date_to: datetime = datetime.today(),
+        incremental_update: bool = True,
     ):
         """Async call of update method."""
-        asyncio.get_event_loop().run_in_executor(
-            None, self.update, *[date_from, date_to]
+        
+        _LOGGER.info(
+            "%s: update triggered",
+            self._scups,
         )
+        self._date_from = date_from
+        self._date_to = date_to
+
+        # update datadis resources
+        await self.update_datadis(self._cups, date_from, date_to)
+
+        # update redata resources if pvpc is requested
+        if self.is_pvpc:
+            try:
+                await asyncio.to_thread(self.update_redata, date_from, date_to)
+            except requests.exceptions.Timeout:
+                _LOGGER.error("Timeout exception while updating from REData")
+
+        await asyncio.to_thread(self.process_data, incremental_update=incremental_update)
+
+        if self._must_dump:
+            await asyncio.to_thread(dump_storage, self._cups, self.data, self._storage_dir)
 
     def update(
         self,
@@ -121,35 +141,15 @@ class EdataHelper:
     ):
         """Update synchronously."""
 
-        _LOGGER.info(
-            "%s: update triggered",
-            self._scups,
-        )
-        self._date_from = date_from
-        self._date_to = date_to
+        asyncio.run(self.async_update(date_from, date_to, incremental_update))
 
-        # update datadis resources
-        self.update_datadis(self._cups, date_from, date_to)
-
-        # update redata resources if pvpc is requested
-        if self.is_pvpc:
-            try:
-                self.update_redata(date_from, date_to)
-            except requests.exceptions.Timeout:
-                _LOGGER.error("Timeout exception while updating from REData")
-
-        self.process_data(incremental_update=incremental_update)
-
-        if self._must_dump:
-            dump_storage(self._cups, self.data, self._storage_dir)
-
-    def update_supplies(self):
+    async def update_supplies(self):
         """Update supplies."""
 
         _LOGGER.debug("%s: supplies update triggered", self._scups)
         if datetime.today().date() != self.last_update["supplies"].date():
             # if supplies haven't been updated today
-            supplies = self.datadis_api.get_supplies(
+            supplies = await self.datadis_api.async_get_supplies(
                 authorized_nif=self._authorized_nif
             )  # fetch supplies
             if len(supplies) > 0:
@@ -160,13 +160,13 @@ class EdataHelper:
         else:
             _LOGGER.info("%s: supplies are already updated (skipping)", self._scups)
 
-    def update_contracts(self, cups: str, distributor_code: str):
+    async def update_contracts(self, cups: str, distributor_code: str):
         """Update contracts."""
 
         _LOGGER.debug("%s: contracts update triggered", self._scups)
         if datetime.today().date() != self.last_update["contracts"].date():
             # if contracts haven't been updated today
-            contracts = self.datadis_api.get_contract_detail(
+            contracts = await self.datadis_api.async_get_contract_detail(
                 cups, distributor_code, authorized_nif=self._authorized_nif
             )
             if len(contracts) > 0:
@@ -179,7 +179,7 @@ class EdataHelper:
         else:
             _LOGGER.info("%s: contracts are already updated (skipping)", self._scups)
 
-    def update_consumptions(
+    async def update_consumptions(
         self,
         cups: str,
         distributor_code: str,
@@ -192,7 +192,7 @@ class EdataHelper:
 
         _LOGGER.debug("%s: consumptions update triggered", self._scups)
         if (datetime.now() - self.last_update["consumptions"]) > self.UPDATE_INTERVAL:
-            consumptions = self.datadis_api.get_consumption_data(
+            consumptions = await self.datadis_api.async_get_consumption_data(
                 cups,
                 distributor_code,
                 start_date,
@@ -217,12 +217,12 @@ class EdataHelper:
         else:
             _LOGGER.info("%s: consumptions are already updated (skipping)", self._scups)
 
-    def update_maximeter(self, cups, distributor_code, start_date, end_date):
+    async def update_maximeter(self, cups, distributor_code, start_date, end_date):
         """Update maximeter."""
 
         _LOGGER.debug("%s: maximeter update triggered", self._scups)
         if (datetime.now() - self.last_update["maximeter"]) > self.UPDATE_INTERVAL:
-            maximeter = self.datadis_api.get_max_power(
+            maximeter = await self.datadis_api.async_get_max_power(
                 cups,
                 distributor_code,
                 start_date,
@@ -243,7 +243,7 @@ class EdataHelper:
         else:
             _LOGGER.info("%s: maximeter is already updated (skipping)", self._scups)
 
-    def update_datadis(
+    async def update_datadis(
         self,
         cups: str,
         date_from: datetime = datetime(1970, 1, 1),
@@ -259,7 +259,7 @@ class EdataHelper:
         )
 
         # update supplies and get distributorCode
-        self.update_supplies()
+        await self.update_supplies()
 
         if len(self.data["supplies"]) == 0:
             # return if no supplies were discovered
@@ -294,7 +294,7 @@ class EdataHelper:
         )
 
         # update contracts to get valid periods
-        self.update_contracts(cups, distributor_code)
+        await self.update_contracts(cups, distributor_code)
         if len(self.data["contracts"]) == 0:
             _LOGGER.warning(
                 "%s: contracts update failed or no contracts found in the provided account",
@@ -347,7 +347,7 @@ class EdataHelper:
                     start.isoformat(),
                     end.isoformat(),
                 )
-                self.update_consumptions(
+                await self.update_consumptions(
                     cups,
                     distributor_code,
                     start,
@@ -381,7 +381,7 @@ class EdataHelper:
                     start.isoformat(),
                     end.isoformat(),
                 )
-                self.update_maximeter(cups, distributor_code, start, end)
+                await self.update_maximeter(cups, distributor_code, start, end)
 
         miss_cons, miss_maxim = sort_and_filter(date_from, date_to)
 

@@ -1,7 +1,7 @@
 """Tests for DatadisConnector (offline)."""
 
 import datetime
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch, AsyncMock
 
 import pytest
 
@@ -120,19 +120,17 @@ MAXIMETER_EXPECTATIONS = [
 ]
 
 
-@pytest.mark.order(1)
-@patch.object(DatadisConnector, "_get_token", MagicMock(return_value=True))
-@patch.object(DatadisConnector, "_get", MagicMock(return_value=SUPPLIES_RESPONSE))
-def test_get_supplies():
+@patch.object(DatadisConnector, "_async_get_token", new_callable=AsyncMock, return_value=True)
+@patch.object(DatadisConnector, "_async_get", new_callable=AsyncMock, return_value=SUPPLIES_RESPONSE)
+def test_get_supplies(mock_async_get, mock_async_get_token):
     """Test a successful 'get_supplies' query."""
     connector = DatadisConnector(MOCK_USERNAME, MOCK_PASSWORD)
     assert connector.get_supplies() == SUPPLIES_EXPECTATIONS
 
 
-@pytest.mark.order(2)
-@patch.object(DatadisConnector, "_get_token", MagicMock(return_value=True))
-@patch.object(DatadisConnector, "_get", MagicMock(return_value=CONTRACTS_RESPONSE))
-def test_get_contract_detail():
+@patch.object(DatadisConnector, "_async_get_token", new_callable=AsyncMock, return_value=True)
+@patch.object(DatadisConnector, "_async_get", new_callable=AsyncMock, return_value=CONTRACTS_RESPONSE)
+def test_get_contract_detail(mock_async_get, mock_async_get_token):
     """Test a successful 'get_contract_detail' query."""
     connector = DatadisConnector(MOCK_USERNAME, MOCK_PASSWORD)
     assert (
@@ -141,10 +139,9 @@ def test_get_contract_detail():
     )
 
 
-@pytest.mark.order(3)
-@patch.object(DatadisConnector, "_get_token", MagicMock(return_value=True))
-@patch.object(DatadisConnector, "_get", MagicMock(return_value=CONSUMPTIONS_RESPONSE))
-def test_get_consumption_data():
+@patch.object(DatadisConnector, "_async_get_token", new_callable=AsyncMock, return_value=True)
+@patch.object(DatadisConnector, "_async_get", new_callable=AsyncMock, return_value=CONSUMPTIONS_RESPONSE)
+def test_get_consumption_data(mock_async_get, mock_async_get_token):
     """Test a successful 'get_consumption_data' query."""
     connector = DatadisConnector(MOCK_USERNAME, MOCK_PASSWORD)
     assert (
@@ -160,10 +157,9 @@ def test_get_consumption_data():
     )
 
 
-@pytest.mark.order(4)
-@patch.object(DatadisConnector, "_get_token", MagicMock(return_value=True))
-@patch.object(DatadisConnector, "_get", MagicMock(return_value=MAXIMETER_RESPONSE))
-def test_get_max_power():
+@patch.object(DatadisConnector, "_async_get_token", new_callable=AsyncMock, return_value=True)
+@patch.object(DatadisConnector, "_async_get", new_callable=AsyncMock, return_value=MAXIMETER_RESPONSE)
+def test_get_max_power(mock_async_get, mock_async_get_token):
     """Test a successful 'get_max_power' query."""
     connector = DatadisConnector(MOCK_USERNAME, MOCK_PASSWORD)
     assert (

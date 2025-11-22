@@ -6,8 +6,6 @@ import pytest
 
 from ..connectors.redata import REDataConnector
 
-
-@pytest.mark.order(5)
 def test_get_realtime_prices():
     """Test a successful 'get_realtime_prices' query"""
     connector = REDataConnector()

@@ -3,7 +3,6 @@
 import json
 import pathlib
 
-import pytest
 from freezegun import freeze_time
 
 from ..definitions import PricingRules
@@ -30,8 +29,6 @@ PRICING_RULES_PVPC = PricingRules(
     p3_kwh_eur=None,
 )
 
-
-@pytest.mark.order(10000)
 @freeze_time(AT_TIME)
 def test_helper_offline() -> None:
     """Tests EdataHelper"""

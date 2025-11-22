@@ -39,7 +39,6 @@ def _compare_processor_output(
             assert utils.serialize_dict(processor.output) == expected_output
 
 
-@pytest.mark.order(1000)
 @pytest.mark.parametrize(
     "processor, key",
     [(ConsumptionProcessor, "consumptions"), (MaximeterProcessor, "maximeter")],
@@ -54,7 +53,6 @@ def test_processor(processor: Processor, key: str) -> None:
     )
 
 
-@pytest.mark.order(1001)
 @pytest.mark.parametrize(
     "_id, rules, prices",
     [

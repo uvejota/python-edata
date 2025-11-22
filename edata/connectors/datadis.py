@@ -16,7 +16,9 @@ import os
 import tempfile
 
 from dateutil.relativedelta import relativedelta
-import requests
+
+import aiohttp
+import asyncio
 
 from ..definitions import ConsumptionData, ContractData, MaxPowerData, SupplyData
 from ..processors import utils
@@ -79,6 +81,7 @@ def migrate_storage(storage_dir):
         os.remove(os.path.join(storage_dir, "edata_recent_queries_cache.json"))
 
 
+
 class DatadisConnector:
     """A Datadis private API connector."""
 
@@ -89,12 +92,8 @@ class DatadisConnector:
         enable_smart_fetch: bool = True,
         storage_path: str | None = None,
     ) -> None:
-        """DatadisConnector constructor."""
-
-        # initialize some things
         self._usr = username
         self._pwd = password
-        self._session = requests.Session()
         self._token = {}
         self._smart_fetch = enable_smart_fetch
         self._recent_queries = {}
@@ -107,7 +106,6 @@ class DatadisConnector:
             self._recent_cache_dir = os.path.join(
                 tempfile.gettempdir(), RECENT_CACHE_SUBDIR
             )
-
         os.makedirs(self._recent_cache_dir, exist_ok=True)
 
     def _update_recent_queries(self, query: str, data: dict | None = None) -> None:
@@ -163,34 +161,39 @@ class DatadisConnector:
         except (FileNotFoundError, json.decoder.JSONDecodeError):
             return None
 
-    def _get_token(self):
-        """Private method that fetches a new token if needed."""
 
+    async def _async_get_token(self):
+        """Private async method that fetches a new token if needed."""
         _LOGGER.info("No token found, fetching a new one")
         is_valid_token = False
-        self._session = requests.Session()
-        response = self._session.post(
-            URL_TOKEN,
-            data={
-                TOKEN_USERNAME: self._usr.encode("utf-8"),
-                TOKEN_PASSWD: self._pwd.encode("utf-8"),
-            },
-        )
-        if response.status_code == 200:
-            # store token encoded
-            self._token["encoded"] = response.text
-            # prepare session authorization bearer
-            self._session.headers["Authorization"] = "Bearer " + self._token["encoded"]
-            is_valid_token = True
-        else:
-            _LOGGER.error("Unknown error while retrieving token, got %s", response.text)
+        timeout = aiohttp.ClientTimeout(total=TIMEOUT)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            try:
+                async with session.post(
+                    URL_TOKEN,
+                    data={
+                        TOKEN_USERNAME: self._usr.encode("utf-8"),
+                        TOKEN_PASSWD: self._pwd.encode("utf-8"),
+                    },
+                ) as response:
+                    text = await response.text()
+                    if response.status == 200:
+                        self._token["encoded"] = text
+                        self._token["headers"] = {"Authorization": "Bearer " + self._token["encoded"]}
+                        is_valid_token = True
+                    else:
+                        _LOGGER.error("Unknown error while retrieving token, got %s", text)
+            except Exception as e:
+                _LOGGER.error("Exception while retrieving token: %s", e)
         return is_valid_token
 
-    def login(self):
-        """Test to login with provided credentials."""
-        return self._get_token()
 
-    def _get(
+    def login(self):
+        """Test to login with provided credentials (sync wrapper)."""
+        return asyncio.run(self._async_get_token())
+
+
+    async def _async_get(
         self,
         url: str,
         request_data: dict | None = None,
@@ -198,39 +201,33 @@ class DatadisConnector:
         is_retry: bool = False,
         ignore_recent_queries: bool = False,
     ):
-        """Get request for Datadis API."""
-
+        """Async get request for Datadis API."""
         if request_data is None:
             data = {}
         else:
             data = request_data
 
-        # refresh token if needed (recursive approach)
         is_valid_token = False
         response = []
         if refresh_token:
-            is_valid_token = self._get_token()
+            is_valid_token = await self._async_get_token()
         if is_valid_token or not refresh_token:
-            # build get parameters
             params = "?" if len(data) > 0 else ""
             for param in data:
                 key = param
                 value = data[param]
                 params = params + f"{key}={value}&"
             anonym_params = "?" if len(data) > 0 else ""
-
-            # build anonymized params for logging
             for anonym_param in data:
                 key = anonym_param
                 if key == "cups":
-                    value = "xxxx" + data[anonym_param][-5:]
+                    value = "xxxx" + str(data[anonym_param])[-5:]
                 elif key == "authorizedNif":
                     value = "xxxx"
                 else:
                     value = data[anonym_param]
                 anonym_params = anonym_params + f"{key}={value}&"
 
-            # check if query is already in cache
             if not ignore_recent_queries and self._is_recent_query(url + params):
                 _cache = self._get_cache_for_query(url + params)
                 if _cache is not None:
@@ -240,98 +237,88 @@ class DatadisConnector:
                     return _cache
                 return []
 
-            # run the query
             try:
                 _LOGGER.info("GET %s", url + anonym_params)
-                reply = self._session.get(
-                    url + params,
-                    headers={"Accept-Encoding": "identity"},
-                    timeout=TIMEOUT,
-                )
-            except requests.exceptions.Timeout:
+                headers = {"Accept-Encoding": "identity"}
+                if self._token.get("headers"):
+                    headers.update(self._token["headers"])
+                timeout = aiohttp.ClientTimeout(total=TIMEOUT)
+                async with aiohttp.ClientSession(timeout=timeout) as session:
+                    async with session.get(
+                        url + params,
+                        headers=headers,
+                    ) as reply:
+                        text = await reply.text()
+                        if reply.status == 200:
+                            _LOGGER.info("Got 200 OK")
+                            try:
+                                json_data = await reply.json()
+                                if json_data:
+                                    response = json_data
+                                    if not ignore_recent_queries:
+                                        self._update_recent_queries(url + params, response)
+                                else:
+                                    _LOGGER.info("Got an empty response")
+                                    if not ignore_recent_queries:
+                                        self._update_recent_queries(url + params)
+                            except Exception:
+                                _LOGGER.warning("Failed to parse JSON response")
+                        elif reply.status == 401 and not refresh_token:
+                            response = await self._async_get(
+                                url,
+                                request_data=data,
+                                refresh_token=True,
+                                ignore_recent_queries=ignore_recent_queries,
+                            )
+                        elif reply.status == 429:
+                            _LOGGER.warning(
+                                "Got status code '%s' with message '%s'",
+                                reply.status,
+                                text,
+                            )
+                            if not ignore_recent_queries:
+                                self._update_recent_queries(url + params)
+                        elif is_retry:
+                            if (url + params) not in self._warned_queries:
+                                _LOGGER.warning(
+                                    "Got status code '%s' with message '%s'. %s. %s",
+                                    reply.status,
+                                    text,
+                                    "Query temporary disabled",
+                                    "Future 500 code errors for this query will be silenced until restart",
+                                )
+                            if not ignore_recent_queries:
+                                self._update_recent_queries(url + params)
+                            self._warned_queries.append(url + params)
+                        else:
+                            response = await self._async_get(
+                                url,
+                                request_data,
+                                is_retry=True,
+                                ignore_recent_queries=ignore_recent_queries,
+                            )
+            except asyncio.TimeoutError:
                 _LOGGER.warning("Timeout at %s", url + anonym_params)
                 return []
-
-            # eval response
-            if reply.status_code == 200:
-                # we're here if reply seems valid
-                _LOGGER.info("Got 200 OK")
-                if reply.json():
-                    response = reply.json()
-                    if not ignore_recent_queries:
-                        self._update_recent_queries(url + params, response)
-                else:
-                    # this mostly happens when datadis provides an empty response
-                    _LOGGER.info("Got an empty response")
-                    if not ignore_recent_queries:
-                        self._update_recent_queries(url + params)
-            elif reply.status_code == 401 and not refresh_token:
-                # we're here if we were unauthorized so we will refresh the token
-                response = self._get(
-                    url,
-                    request_data=data,
-                    refresh_token=True,
-                    ignore_recent_queries=ignore_recent_queries,
-                )
-            elif reply.status_code == 429:
-                # we're here if we exceeded datadis API rates (24h)
-                _LOGGER.warning(
-                    "Got status code '%s' with message '%s'",
-                    reply.status_code,
-                    reply.text,
-                )
-                if not ignore_recent_queries:
-                    self._update_recent_queries(url + params)
-            elif is_retry:
-                # otherwise, if this was a retried request... warn the user
-                if (url + params) not in self._warned_queries:
-                    _LOGGER.warning(
-                        "Got status code '%s' with message '%s'. %s. %s",
-                        reply.status_code,
-                        reply.text,
-                        "Query temporary disabled",
-                        "Future 500 code errors for this query will be silenced until restart",
-                    )
-                if not ignore_recent_queries:
-                    self._update_recent_queries(url + params)
-                self._warned_queries.append(url + params)
-            else:
-                # finally, retry since an unexpected error took place (mostly 500 errors - server fault)
-                response = self._get(
-                    url,
-                    request_data,
-                    is_retry=True,
-                    ignore_recent_queries=ignore_recent_queries,
-                )
-
+            except Exception as e:
+                _LOGGER.warning("Exception at %s: %s", url + anonym_params, e)
+                return []
         return response
 
-    def get_supplies(self, authorized_nif: str | None = None):
-        """Datadis 'get_supplies' query."""
-
+    async def async_get_supplies(self, authorized_nif: str | None = None):
         data = {}
-
-        # If authorized_nif is provided, we have to include it as parameter
         if authorized_nif is not None:
             data["authorizedNif"] = authorized_nif
-
-        # Request the resource
-        response = self._get(
+        response = await self._async_get(
             URL_GET_SUPPLIES, request_data=data, ignore_recent_queries=True
         )
-
-        # Response is a list of serialized supplies.
-        # We will iter through them to transform them into SupplyData objects
         supplies = []
-        # Build tomorrow Y/m/d string since we will use it as the 'date_end' of
-        # active supplies
         tomorrow_str = (datetime.today() + timedelta(days=1)).strftime("%Y/%m/%d")
         for i in response:
-            # check data integrity (maybe this can be supressed if datadis proves to be reliable)
             if all(k in i for k in GET_SUPPLIES_MANDATORY_FIELDS):
                 supplies.append(
                     SupplyData(
-                        cups=i["cups"],  # the supply identifier
+                        cups=i["cups"],
                         date_start=datetime.strptime(
                             (
                                 i["validDateFrom"]
@@ -339,7 +326,7 @@ class DatadisConnector:
                                 else "1970/01/01"
                             ),
                             "%Y/%m/%d",
-                        ),  # start date of the supply. 1970/01/01 if unset.
+                        ),
                         date_end=datetime.strptime(
                             (
                                 i["validDateTo"]
@@ -347,14 +334,12 @@ class DatadisConnector:
                                 else tomorrow_str
                             ),
                             "%Y/%m/%d",
-                        ),  # end date of the supply, tomorrow if unset
-                        # the following parameters are not crucial, so they can be none
+                        ),
                         address=i.get("address", None),
                         postal_code=i.get("postalCode", None),
                         province=i.get("province", None),
                         municipality=i.get("municipality", None),
                         distributor=i.get("distributor", None),
-                        # these two are mandatory, we will use them to fetch contracts data
                         pointType=i["pointType"],
                         distributorCode=i["distributorCode"],
                     )
@@ -366,14 +351,18 @@ class DatadisConnector:
                 )
         return supplies
 
-    def get_contract_detail(
+    def get_supplies(self, authorized_nif: str | None = None):
+        """Datadis 'get_supplies' query (sync wrapper)."""
+        return asyncio.run(self.async_get_supplies(authorized_nif=authorized_nif))
+
+
+    async def async_get_contract_detail(
         self, cups: str, distributor_code: str, authorized_nif: str | None = None
     ):
-        """Datadis get_contract_detail query."""
         data = {"cups": cups, "distributorCode": distributor_code}
         if authorized_nif is not None:
             data["authorizedNif"] = authorized_nif
-        response = self._get(
+        response = await self._async_get(
             URL_GET_CONTRACT_DETAIL, request_data=data, ignore_recent_queries=True
         )
         contracts = []
@@ -411,7 +400,14 @@ class DatadisConnector:
                 )
         return contracts
 
-    def get_consumption_data(
+    def get_contract_detail(
+        self, cups: str, distributor_code: str, authorized_nif: str | None = None
+    ):
+        """Datadis get_contract_detail query (sync wrapper)."""
+        return asyncio.run(self.async_get_contract_detail(cups, distributor_code, authorized_nif))
+
+
+    async def async_get_consumption_data(
         self,
         cups: str,
         distributor_code: str,
@@ -422,8 +418,6 @@ class DatadisConnector:
         authorized_nif: str | None = None,
         is_smart_fetch: bool = False,
     ):
-        """Datadis get_consumption_data query."""
-
         if self._smart_fetch and not is_smart_fetch:
             _start = start_date
             consumptions = []
@@ -431,18 +425,19 @@ class DatadisConnector:
                 _end = min(
                     _start + relativedelta(months=MAX_CONSUMPTIONS_MONTHS), end_date
                 )
+                sub_consumptions = await self.async_get_consumption_data(
+                    cups,
+                    distributor_code,
+                    _start,
+                    _end,
+                    measurement_type,
+                    point_type,
+                    authorized_nif,
+                    is_smart_fetch=True,
+                )
                 consumptions = utils.extend_by_key(
                     consumptions,
-                    self.get_consumption_data(
-                        cups,
-                        distributor_code,
-                        _start,
-                        _end,
-                        measurement_type,
-                        point_type,
-                        authorized_nif,
-                        is_smart_fetch=True,
-                    ),
+                    sub_consumptions,
                     "datetime",
                 )
                 _start = _end
@@ -459,7 +454,7 @@ class DatadisConnector:
         if authorized_nif is not None:
             data["authorizedNif"] = authorized_nif
 
-        response = self._get(URL_GET_CONSUMPTION_DATA, request_data=data)
+        response = await self._async_get(URL_GET_CONSUMPTION_DATA, request_data=data)
 
         consumptions = []
         for i in response:
@@ -490,7 +485,31 @@ class DatadisConnector:
                     )
         return consumptions
 
-    def get_max_power(
+    def get_consumption_data(
+        self,
+        cups: str,
+        distributor_code: str,
+        start_date: datetime,
+        end_date: datetime,
+        measurement_type: str,
+        point_type: int,
+        authorized_nif: str | None = None,
+        is_smart_fetch: bool = False,
+    ):
+        """Datadis get_consumption_data query (sync wrapper)."""
+        return asyncio.run(self.async_get_consumption_data(
+            cups,
+            distributor_code,
+            start_date,
+            end_date,
+            measurement_type,
+            point_type,
+            authorized_nif,
+            is_smart_fetch,
+        ))
+
+
+    async def async_get_max_power(
         self,
         cups: str,
         distributor_code: str,
@@ -498,8 +517,6 @@ class DatadisConnector:
         end_date: datetime,
         authorized_nif: str | None = None,
     ):
-        """Datadis get_max_power query."""
-
         data = {
             "cups": cups,
             "distributorCode": distributor_code,
@@ -508,7 +525,7 @@ class DatadisConnector:
         }
         if authorized_nif is not None:
             data["authorizedNif"] = authorized_nif
-        response = self._get(URL_GET_MAX_POWER, request_data=data)
+        response = await self._async_get(URL_GET_MAX_POWER, request_data=data)
         maxpower_values = []
         for i in response:
             if all(k in i for k in GET_MAX_POWER_MANDATORY_FIELDS):
@@ -526,3 +543,20 @@ class DatadisConnector:
                     response,
                 )
         return maxpower_values
+
+    def get_max_power(
+        self,
+        cups: str,
+        distributor_code: str,
+        start_date: datetime,
+        end_date: datetime,
+        authorized_nif: str | None = None,
+    ):
+        """Datadis get_max_power query (sync wrapper)."""
+        return asyncio.run(self.async_get_max_power(
+            cups,
+            distributor_code,
+            start_date,
+            end_date,
+            authorized_nif,
+        ))
