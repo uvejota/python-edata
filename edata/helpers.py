@@ -124,7 +124,7 @@ class EdataHelper:
         # update redata resources if pvpc is requested
         if self.is_pvpc:
             try:
-                await asyncio.to_thread(self.update_redata, date_from, date_to)
+                await self.update_redata (date_from, date_to)
             except requests.exceptions.Timeout:
                 _LOGGER.error("Timeout exception while updating from REData")
 
@@ -152,6 +152,7 @@ class EdataHelper:
             supplies = await self.datadis_api.async_get_supplies(
                 authorized_nif=self._authorized_nif
             )  # fetch supplies
+            supplies = [s.model_dump() for s in supplies]
             if len(supplies) > 0:
                 self.data["supplies"] = supplies
                 # if we got something, update last_update flag
@@ -169,6 +170,7 @@ class EdataHelper:
             contracts = await self.datadis_api.async_get_contract_detail(
                 cups, distributor_code, authorized_nif=self._authorized_nif
             )
+            contracts = [c.model_dump() for c in contracts]
             if len(contracts) > 0:
                 self.data["contracts"] = utils.extend_by_key(
                     self.data["contracts"], contracts, "date_start"
@@ -201,6 +203,7 @@ class EdataHelper:
                 point_type,
                 authorized_nif=self._authorized_nif,
             )
+            consumptions = [c.model_dump() for c in consumptions]
             if len(consumptions) > 0:
                 _LOGGER.info(
                     "%s: got consumptions from %s to %s",
@@ -229,6 +232,7 @@ class EdataHelper:
                 end_date,
                 authorized_nif=self._authorized_nif,
             )
+            maximeter = [m.model_dump() for m in maximeter]
             if len(maximeter) > 0:
                 _LOGGER.info(
                     "%s: maximeter update succeeded",
@@ -387,7 +391,7 @@ class EdataHelper:
 
         return True
 
-    def update_redata(
+    async def update_redata(
         self,
         date_from: datetime = (datetime.today() - timedelta(days=30)).replace(
             hour=0, minute=0
@@ -416,7 +420,7 @@ class EdataHelper:
                 gap["from"],
             )
             while len(prices) == 0 and gap["from"] < gap["to"]:
-                prices = self.redata_api.get_realtime_prices(gap["from"], gap["to"])
+                prices = await self.redata_api.async_get_realtime_prices(gap["from"], gap["to"])
                 gap["from"] = gap["from"] + timedelta(days=1)
             self.data["pvpc"] = utils.extend_by_key(
                 self.data["pvpc"], prices, "datetime"

@@ -13,6 +13,7 @@ import hashlib
 import logging
 import os
 import tempfile
+import typing
 import diskcache
 
 from dateutil.relativedelta import relativedelta
@@ -20,7 +21,7 @@ from dateutil.relativedelta import relativedelta
 import aiohttp
 import asyncio
 
-from ..definitions import ConsumptionData, ContractData, MaxPowerData, SupplyData
+from edata.models import Supply, Contract, Energy, Power
 from ..processors import utils
 
 _LOGGER = logging.getLogger(__name__)
@@ -124,7 +125,7 @@ class DatadisConnector:
         hash_query = hashlib.md5(query.encode()).hexdigest()
         return hash_query in self._cache
 
-    def _get_cache_for_query(self, query: str) -> dict | None:
+    def _get_cache_for_query(self, query: str):
         """Return cached response for a query (diskcache)."""
         hash_query = hashlib.md5(query.encode()).hexdigest()
         try:
@@ -171,8 +172,9 @@ class DatadisConnector:
         refresh_token: bool = False,
         is_retry: bool = False,
         ignore_recent_queries: bool = False,
-    ):
+    ) -> list[dict[str,typing.Any]]:
         """Async get request for Datadis API."""
+        
         if request_data is None:
             data = {}
         else:
@@ -205,7 +207,7 @@ class DatadisConnector:
                     _LOGGER.info(
                         "Returning cached response for '%s'", url + anonym_params
                     )
-                    return _cache
+                    return _cache # type: ignore
                 return []
 
             try:
@@ -276,7 +278,7 @@ class DatadisConnector:
                 return []
         return response
 
-    async def async_get_supplies(self, authorized_nif: str | None = None):
+    async def async_get_supplies(self, authorized_nif: str | None = None) -> list[Supply]:
         data = {}
         if authorized_nif is not None:
             data["authorizedNif"] = authorized_nif
@@ -288,7 +290,7 @@ class DatadisConnector:
         for i in response:
             if all(k in i for k in GET_SUPPLIES_MANDATORY_FIELDS):
                 supplies.append(
-                    SupplyData(
+                    Supply(
                         cups=i["cups"],
                         date_start=datetime.strptime(
                             (
@@ -329,7 +331,7 @@ class DatadisConnector:
 
     async def async_get_contract_detail(
         self, cups: str, distributor_code: str, authorized_nif: str | None = None
-    ):
+    ) -> list[Contract]:
         data = {"cups": cups, "distributorCode": distributor_code}
         if authorized_nif is not None:
             data["authorizedNif"] = authorized_nif
@@ -341,7 +343,7 @@ class DatadisConnector:
         for i in response:
             if all(k in i for k in GET_CONTRACT_DETAIL_MANDATORY_FIELDS):
                 contracts.append(
-                    ContractData(
+                    Contract(
                         date_start=datetime.strptime(
                             i["startDate"] if i["startDate"] != "" else "1970/01/01",
                             "%Y/%m/%d",
@@ -388,7 +390,7 @@ class DatadisConnector:
         point_type: int,
         authorized_nif: str | None = None,
         is_smart_fetch: bool = False,
-    ):
+    ) -> list[Energy]:
         if self._smart_fetch and not is_smart_fetch:
             _start = start_date
             consumptions = []
@@ -441,7 +443,7 @@ class DatadisConnector:
                     if _surplus is None:
                         _surplus = 0
                     consumptions.append(
-                        ConsumptionData(
+                        Energy(
                             datetime=date_as_dt,
                             delta_h=1,
                             value_kWh=i["consumptionKWh"],
@@ -487,7 +489,7 @@ class DatadisConnector:
         start_date: datetime,
         end_date: datetime,
         authorized_nif: str | None = None,
-    ):
+    )-> list[Power]:
         data = {
             "cups": cups,
             "distributorCode": distributor_code,
@@ -501,7 +503,7 @@ class DatadisConnector:
         for i in response:
             if all(k in i for k in GET_MAX_POWER_MANDATORY_FIELDS):
                 maxpower_values.append(
-                    MaxPowerData(
+                    Power(
                         datetime=datetime.strptime(
                             f"{i['date']} {i['time']}", "%Y/%m/%d %H:%M"
                         ),

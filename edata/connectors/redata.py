@@ -7,7 +7,7 @@ import aiohttp
 import asyncio
 from dateutil import parser
 
-from ..definitions import PricingData
+from edata.models import EnergyPrice
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -31,7 +31,7 @@ class REDataConnector:
 
     async def async_get_realtime_prices(
         self, dt_from: dt.datetime, dt_to: dt.datetime, is_ceuta_melilla: bool = False
-    ) -> list:
+    ) -> list[EnergyPrice]:
         """GET query to fetch realtime pvpc prices, historical data is limited to current month (async)"""
         url = URL_REALTIME_PRICES.format(
             geo_id=8744 if is_ceuta_melilla else 8741,
@@ -57,7 +57,7 @@ class REDataConnector:
                             return data
                         for element in res_list:
                             data.append(
-                                PricingData(
+                                EnergyPrice(
                                     datetime=parser.parse(element["datetime"]).replace(tzinfo=None),
                                     value_eur_kWh=element["value"] / 1000,
                                     delta_h=1,
