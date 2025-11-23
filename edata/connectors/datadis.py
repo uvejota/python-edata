@@ -8,12 +8,12 @@ There a few issues that are workarounded:
 
 import contextlib
 from datetime import datetime, timedelta
-import glob
+
 import hashlib
-import json
 import logging
 import os
 import tempfile
+import diskcache
 
 from dateutil.relativedelta import relativedelta
 
@@ -69,13 +69,14 @@ GET_MAX_POWER_MANDATORY_FIELDS = ["time", "date", "maxPower"]
 TIMEOUT = 3 * 60  # requests timeout
 QUERY_LIMIT = timedelta(hours=24)  # a datadis limitation, again...
 
+
 # Cache-related constants
 RECENT_CACHE_SUBDIR = "cache"
 
 
+
 def migrate_storage(storage_dir):
     """Migrate storage from older versions."""
-
     with contextlib.suppress(FileNotFoundError):
         os.remove(os.path.join(storage_dir, "edata_recent_queries.json"))
         os.remove(os.path.join(storage_dir, "edata_recent_queries_cache.json"))
@@ -107,58 +108,28 @@ class DatadisConnector:
                 tempfile.gettempdir(), RECENT_CACHE_SUBDIR
             )
         os.makedirs(self._recent_cache_dir, exist_ok=True)
+        self._cache = diskcache.Cache(self._recent_cache_dir)
 
     def _update_recent_queries(self, query: str, data: dict | None = None) -> None:
-        """Cache a successful query to avoid exceeding query limits."""
-
-        # identify the query by a md5 hash
+        """Cache a successful query to avoid exceeding query limits (diskcache)."""
         hash_query = hashlib.md5(query.encode()).hexdigest()
-
-        # remove expired cache files
-        with contextlib.suppress(FileNotFoundError):
-            for cache_file in glob.glob(os.path.join(self._recent_cache_dir, "*")):
-                if (
-                    datetime.now()
-                    - datetime.fromtimestamp(os.path.getmtime(cache_file))
-                ) > QUERY_LIMIT:
-                    _LOGGER.info("Removing cache item '%s'", cache_file)
-                    os.remove(cache_file)
-
-        # dump current cache to disk
         try:
-            with open(
-                os.path.join(self._recent_cache_dir, hash_query),
-                "w",
-                encoding="utf8",
-            ) as dst_file:
-                json.dump(data, dst_file)
-                _LOGGER.info("Updating cache item '%s'", hash_query)
-
+            self._cache.set(hash_query, data, expire=QUERY_LIMIT.total_seconds())
+            _LOGGER.info("Updating cache item '%s'", hash_query)
         except Exception as e:
             _LOGGER.warning("Unknown error while updating cache: %s", e)
 
     def _is_recent_query(self, query: str) -> bool:
-        """Check if a query has been done recently to avoid exceeding query limits."""
-
+        """Check if a query has been done recently to avoid exceeding query limits (diskcache)."""
         hash_query = hashlib.md5(query.encode()).hexdigest()
-        cache_file = os.path.join(self._recent_cache_dir, hash_query)
-
-        return (
-            os.path.exists(cache_file)
-            and (datetime.now() - datetime.fromtimestamp(os.path.getmtime(cache_file)))
-            < QUERY_LIMIT
-        )
+        return hash_query in self._cache
 
     def _get_cache_for_query(self, query: str) -> dict | None:
-        """Return cached response for a query."""
-
+        """Return cached response for a query (diskcache)."""
         hash_query = hashlib.md5(query.encode()).hexdigest()
-        cache_file = os.path.join(self._recent_cache_dir, hash_query)
-
         try:
-            with open(cache_file, encoding="utf8") as cache:
-                return json.load(cache)
-        except (FileNotFoundError, json.decoder.JSONDecodeError):
+            return self._cache.get(hash_query, default=None)
+        except Exception:
             return None
 
 
