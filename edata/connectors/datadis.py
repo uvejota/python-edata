@@ -160,9 +160,13 @@ class DatadisConnector:
                 _LOGGER.error("Exception while retrieving token: %s", e)
         return is_valid_token
 
+    async def async_login(self):
+        """Test to login with provided credentials (async)."""
+        return await self._async_get_token()
+
     def login(self):
         """Test to login with provided credentials (sync wrapper)."""
-        return asyncio.run(self._async_get_token())
+        return asyncio.run(self.async_login())
 
     async def _async_get(
         self,
