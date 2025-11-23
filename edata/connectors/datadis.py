@@ -143,8 +143,8 @@ class DatadisConnector:
                 async with session.post(
                     URL_TOKEN,
                     data={
-                        TOKEN_USERNAME: self._usr.encode("utf-8"),
-                        TOKEN_PASSWD: self._pwd.encode("utf-8"),
+                        TOKEN_USERNAME: self._usr,
+                        TOKEN_PASSWD: self._pwd,
                     },
                 ) as response:
                     text = await response.text()
@@ -223,7 +223,7 @@ class DatadisConnector:
                         if reply.status == 200:
                             _LOGGER.info("Got 200 OK")
                             try:
-                                json_data = await reply.json()
+                                json_data = await reply.json(content_type=None)
                                 if json_data:
                                     response = json_data
                                     if not ignore_recent_queries:
@@ -232,7 +232,7 @@ class DatadisConnector:
                                     _LOGGER.info("Got an empty response")
                                     if not ignore_recent_queries:
                                         self._update_recent_queries(url + params)
-                            except Exception:
+                            except Exception as e:
                                 _LOGGER.warning("Failed to parse JSON response")
                         elif reply.status == 401 and not refresh_token:
                             response = await self._async_get(
