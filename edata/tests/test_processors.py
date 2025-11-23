@@ -17,14 +17,12 @@ from ..processors.maximeter import MaximeterProcessor
 
 TESTS_DIR = str(pathlib.Path(__file__).parent.resolve())
 TEST_GOOD_INPUT = TESTS_DIR + "/assets/processors/edata.storage_TEST"
-TEST_EXPECTATIONS = TESTS_DIR + "/assets/processors/{key}.out"
-
 
 def _compare_processor_output(
     source_filepath: str,
-    expectations_filepath: str,
     processor_class: Processor,
     key: str,
+    snapshot,
 ):
     with open(source_filepath, encoding="utf-8") as original_file:
         data = utils.deserialize_dict(json.load(original_file))
@@ -32,24 +30,20 @@ def _compare_processor_output(
             processor = processor_class({"consumptions": data[key]})
         else:
             processor = processor_class(data[key])
-        # with open(expectations_filepath, "w", encoding="utf-8") as expectations_file:
-        #     json.dump(utils.serialize_dict(processor.output), expectations_file)
-        with open(expectations_filepath, encoding="utf-8") as expectations_file:
-            expected_output = json.load(expectations_file)
-            assert utils.serialize_dict(processor.output) == expected_output
+        assert utils.serialize_dict(processor.output) == snapshot
 
 
 @pytest.mark.parametrize(
     "processor, key",
     [(ConsumptionProcessor, "consumptions"), (MaximeterProcessor, "maximeter")],
 )
-def test_processor(processor: Processor, key: str) -> None:
-    """Tests all processors but billing"""
+def test_processor(processor: Processor, key: str, snapshot) -> None:
+    """Tests all processors but billing (syrupy snapshot)"""
     _compare_processor_output(
         TEST_GOOD_INPUT,
-        TEST_EXPECTATIONS.format(key=key),
         processor,
         key,
+        snapshot,
     )
 
 
@@ -96,9 +90,9 @@ def test_processor(processor: Processor, key: str) -> None:
     ],
 )
 def test_processor_billing(
-    _id: str, rules: PricingRules, prices: typing.Optional[Iterable[PricingData]]
+    _id: str, rules: PricingRules, prices: typing.Optional[Iterable[PricingData]], snapshot
 ):
-    """Tests billing processor"""
+    """Tests billing processor (syrupy snapshot)"""
     with open(TEST_GOOD_INPUT, "r", encoding="utf-8") as original_file:
         data = utils.deserialize_dict(json.load(original_file))
         processor = BillingProcessor(
@@ -109,10 +103,4 @@ def test_processor_billing(
                 "rules": rules,
             }
         )
-    # with open(TEST_EXPECTATIONS.format(key=f"billing-{_id}"), "w", encoding="utf-8") as expectations_file:
-    #     json.dump(utils.serialize_dict(processor.output), expectations_file)
-    with open(
-        TEST_EXPECTATIONS.format(key=f"billing-{_id}"), "r", encoding="utf-8"
-    ) as expectations_file:
-        expected_output = json.load(expectations_file)
-        assert utils.serialize_dict(processor.output) == expected_output
+    assert utils.serialize_dict(processor.output) == snapshot

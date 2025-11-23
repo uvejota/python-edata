@@ -2,8 +2,6 @@
 
 from datetime import datetime, timedelta
 
-import pytest
-
 from ..connectors.redata import REDataConnector
 
 def test_get_realtime_prices():

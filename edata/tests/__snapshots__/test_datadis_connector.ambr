@@ -1,0 +1,139 @@
+# serializer version: 1
+# name: test_get_consumption_data
+  list([
+    dict({
+      'datetime': datetime.datetime(2022, 10, 22, 0, 0),
+      'delta_h': 1,
+      'real': True,
+      'surplus_kWh': 0,
+      'value_kWh': 0.203,
+    }),
+    dict({
+      'datetime': datetime.datetime(2022, 10, 22, 1, 0),
+      'delta_h': 1,
+      'real': True,
+      'surplus_kWh': 0,
+      'value_kWh': 0.163,
+    }),
+  ])
+# ---
+# name: test_get_consumption_data_cache
+  list([
+    dict({
+      'datetime': datetime.datetime(2022, 10, 22, 0, 0),
+      'delta_h': 1,
+      'real': True,
+      'surplus_kWh': 0,
+      'value_kWh': 0.203,
+    }),
+    dict({
+      'datetime': datetime.datetime(2022, 10, 22, 1, 0),
+      'delta_h': 1,
+      'real': True,
+      'surplus_kWh': 0,
+      'value_kWh': 0.163,
+    }),
+  ])
+# ---
+# name: test_get_consumption_data_cache.1
+  list([
+    dict({
+      'datetime': datetime.datetime(2022, 10, 22, 0, 0),
+      'delta_h': 1,
+      'real': True,
+      'surplus_kWh': 0,
+      'value_kWh': 0.203,
+    }),
+    dict({
+      'datetime': datetime.datetime(2022, 10, 22, 1, 0),
+      'delta_h': 1,
+      'real': True,
+      'surplus_kWh': 0,
+      'value_kWh': 0.163,
+    }),
+  ])
+# ---
+# name: test_get_contract_detail
+  list([
+    dict({
+      'date_end': datetime.datetime(2022, 10, 28, 0, 0),
+      'date_start': datetime.datetime(2022, 3, 9, 0, 0),
+      'distributorCode': '2',
+      'marketer': 'MARKETER',
+      'power_p1': 4.4,
+      'power_p2': 4.4,
+    }),
+  ])
+# ---
+# name: test_get_max_power
+  list([
+    dict({
+      'datetime': datetime.datetime(2022, 3, 10, 14, 15),
+      'value_kW': 2.436,
+    }),
+    dict({
+      'datetime': datetime.datetime(2022, 3, 14, 13, 15),
+      'value_kW': 3.008,
+    }),
+    dict({
+      'datetime': datetime.datetime(2022, 3, 27, 10, 30),
+      'value_kW': 3.288,
+    }),
+  ])
+# ---
+# name: test_get_supplies
+  list([
+    dict({
+      'address': '-',
+      'cups': 'ESXXXXXXXXXXXXXXXXTEST',
+      'date_end': datetime.datetime(2022, 10, 28, 0, 0),
+      'date_start': datetime.datetime(2022, 3, 9, 0, 0),
+      'distributor': '-',
+      'distributorCode': '2',
+      'municipality': '-',
+      'pointType': 5,
+      'postal_code': '-',
+      'province': '-',
+    }),
+  ])
+# ---
+# name: test_get_supplies_empty_response
+  list([
+  ])
+# ---
+# name: test_get_supplies_malformed_response
+  list([
+  ])
+# ---
+# name: test_get_supplies_optional_fields_none
+  list([
+    dict({
+      'address': None,
+      'cups': 'ESXXXXXXXXXXXXXXXXTEST',
+      'date_end': datetime.datetime(2022, 10, 28, 0, 0),
+      'date_start': datetime.datetime(2022, 3, 9, 0, 0),
+      'distributor': None,
+      'distributorCode': '2',
+      'municipality': None,
+      'pointType': 5,
+      'postal_code': None,
+      'province': None,
+    }),
+  ])
+# ---
+# name: test_get_supplies_partial_response
+  list([
+    dict({
+      'address': '-',
+      'cups': 'ESXXXXXXXXXXXXXXXXTEST',
+      'date_end': datetime.datetime(2022, 10, 28, 0, 0),
+      'date_start': datetime.datetime(2022, 3, 9, 0, 0),
+      'distributor': '-',
+      'distributorCode': '2',
+      'municipality': '-',
+      'pointType': 5,
+      'postal_code': '-',
+      'province': '-',
+    }),
+  ])
+# ---

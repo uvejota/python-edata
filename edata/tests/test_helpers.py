@@ -30,9 +30,8 @@ PRICING_RULES_PVPC = PricingRules(
 )
 
 @freeze_time(AT_TIME)
-def test_helper_offline() -> None:
-    """Tests EdataHelper"""
-
+def test_helper_offline(snapshot) -> None:
+    """Tests EdataHelper (syrupy snapshot)"""
     with open(TEST_GOOD_INPUT, "r", encoding="utf-8") as original_file:
         data = utils.deserialize_dict(json.load(original_file))
 
@@ -46,20 +45,8 @@ def test_helper_offline() -> None:
         )
         helper.process_data()
 
-        # with open(TEST_EXPECTATIONS_DATA, "w", encoding="utf-8") as expectations_file:
-        #     json.dump(utils.serialize_dict(helper.data), expectations_file)
-
-        with open(TEST_EXPECTATIONS_DATA, "r", encoding="utf-8") as expectations_file:
-            assert utils.serialize_dict(helper.data) == json.load(expectations_file)
-
-        # with open(TEST_EXPECTATIONS_ATTRIBUTES, "w", encoding="utf-8") as expectations_file:
-        #     json.dump(utils.serialize_dict(helper.attributes), expectations_file)
-
-        with open(
-            TEST_EXPECTATIONS_ATTRIBUTES, "r", encoding="utf-8"
-        ) as expectations_file:
-            assert utils.serialize_dict(helper.attributes) == json.load(
-                expectations_file
-            )
-
-    assert True
+        # Compara ambos outputs con snapshot
+        assert {
+            "data": utils.serialize_dict(helper.data),
+            "attributes": utils.serialize_dict(helper.attributes),
+        } == snapshot
