@@ -3,6 +3,7 @@
 from datetime import datetime
 from pydantic import BaseModel
 
+
 class Energy(BaseModel):
     """Data structure to represent energy consumption and/or surplus during a period."""
 
@@ -18,4 +19,3 @@ class Power(BaseModel):
 
     datetime: datetime
     value_kW: float
-

@@ -18,6 +18,7 @@ from ..processors.maximeter import MaximeterProcessor
 TESTS_DIR = str(pathlib.Path(__file__).parent.resolve())
 TEST_GOOD_INPUT = TESTS_DIR + "/assets/processors/edata.storage_TEST"
 
+
 def _compare_processor_output(
     source_filepath: str,
     processor_class: Processor,
@@ -90,7 +91,10 @@ def test_processor(processor: Processor, key: str, snapshot) -> None:
     ],
 )
 def test_processor_billing(
-    _id: str, rules: PricingRules, prices: typing.Optional[Iterable[PricingData]], snapshot
+    _id: str,
+    rules: PricingRules,
+    prices: typing.Optional[Iterable[PricingData]],
+    snapshot,
 ):
     """Tests billing processor (syrupy snapshot)"""
     with open(TEST_GOOD_INPUT, "r", encoding="utf-8") as original_file:

@@ -3,6 +3,7 @@
 from datetime import datetime
 from pydantic import BaseModel
 
+
 class Supply(BaseModel):
     """Data model of a Supply."""
 
@@ -16,6 +17,7 @@ class Supply(BaseModel):
     distributor: str | None
     pointType: int
     distributorCode: str
+
 
 class Contract(BaseModel):
     """Data model of a Contract."""

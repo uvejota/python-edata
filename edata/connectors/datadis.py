@@ -75,13 +75,11 @@ QUERY_LIMIT = timedelta(hours=24)  # a datadis limitation, again...
 RECENT_CACHE_SUBDIR = "cache"
 
 
-
 def migrate_storage(storage_dir):
     """Migrate storage from older versions."""
     with contextlib.suppress(FileNotFoundError):
         os.remove(os.path.join(storage_dir, "edata_recent_queries.json"))
         os.remove(os.path.join(storage_dir, "edata_recent_queries_cache.json"))
-
 
 
 class DatadisConnector:
@@ -133,7 +131,6 @@ class DatadisConnector:
         except Exception:
             return None
 
-
     async def _async_get_token(self):
         """Private async method that fetches a new token if needed."""
         _LOGGER.info("No token found, fetching a new one")
@@ -151,19 +148,21 @@ class DatadisConnector:
                     text = await response.text()
                     if response.status == 200:
                         self._token["encoded"] = text
-                        self._token["headers"] = {"Authorization": "Bearer " + self._token["encoded"]}
+                        self._token["headers"] = {
+                            "Authorization": "Bearer " + self._token["encoded"]
+                        }
                         is_valid_token = True
                     else:
-                        _LOGGER.error("Unknown error while retrieving token, got %s", text)
+                        _LOGGER.error(
+                            "Unknown error while retrieving token, got %s", text
+                        )
             except Exception as e:
                 _LOGGER.error("Exception while retrieving token: %s", e)
         return is_valid_token
 
-
     def login(self):
         """Test to login with provided credentials (sync wrapper)."""
         return asyncio.run(self._async_get_token())
-
 
     async def _async_get(
         self,
@@ -172,9 +171,9 @@ class DatadisConnector:
         refresh_token: bool = False,
         is_retry: bool = False,
         ignore_recent_queries: bool = False,
-    ) -> list[dict[str,typing.Any]]:
+    ) -> list[dict[str, typing.Any]]:
         """Async get request for Datadis API."""
-        
+
         if request_data is None:
             data = {}
         else:
@@ -207,7 +206,7 @@ class DatadisConnector:
                     _LOGGER.info(
                         "Returning cached response for '%s'", url + anonym_params
                     )
-                    return _cache # type: ignore
+                    return _cache  # type: ignore
                 return []
 
             try:
@@ -229,7 +228,9 @@ class DatadisConnector:
                                 if json_data:
                                     response = json_data
                                     if not ignore_recent_queries:
-                                        self._update_recent_queries(url + params, response)
+                                        self._update_recent_queries(
+                                            url + params, response
+                                        )
                                 else:
                                     _LOGGER.info("Got an empty response")
                                     if not ignore_recent_queries:
@@ -278,7 +279,9 @@ class DatadisConnector:
                 return []
         return response
 
-    async def async_get_supplies(self, authorized_nif: str | None = None) -> list[Supply]:
+    async def async_get_supplies(
+        self, authorized_nif: str | None = None
+    ) -> list[Supply]:
         data = {}
         if authorized_nif is not None:
             data["authorizedNif"] = authorized_nif
@@ -328,7 +331,6 @@ class DatadisConnector:
         """Datadis 'get_supplies' query (sync wrapper)."""
         return asyncio.run(self.async_get_supplies(authorized_nif=authorized_nif))
 
-
     async def async_get_contract_detail(
         self, cups: str, distributor_code: str, authorized_nif: str | None = None
     ) -> list[Contract]:
@@ -377,8 +379,9 @@ class DatadisConnector:
         self, cups: str, distributor_code: str, authorized_nif: str | None = None
     ):
         """Datadis get_contract_detail query (sync wrapper)."""
-        return asyncio.run(self.async_get_contract_detail(cups, distributor_code, authorized_nif))
-
+        return asyncio.run(
+            self.async_get_contract_detail(cups, distributor_code, authorized_nif)
+        )
 
     async def async_get_consumption_data(
         self,
@@ -470,17 +473,18 @@ class DatadisConnector:
         is_smart_fetch: bool = False,
     ):
         """Datadis get_consumption_data query (sync wrapper)."""
-        return asyncio.run(self.async_get_consumption_data(
-            cups,
-            distributor_code,
-            start_date,
-            end_date,
-            measurement_type,
-            point_type,
-            authorized_nif,
-            is_smart_fetch,
-        ))
-
+        return asyncio.run(
+            self.async_get_consumption_data(
+                cups,
+                distributor_code,
+                start_date,
+                end_date,
+                measurement_type,
+                point_type,
+                authorized_nif,
+                is_smart_fetch,
+            )
+        )
 
     async def async_get_max_power(
         self,
@@ -489,7 +493,7 @@ class DatadisConnector:
         start_date: datetime,
         end_date: datetime,
         authorized_nif: str | None = None,
-    )-> list[Power]:
+    ) -> list[Power]:
         data = {
             "cups": cups,
             "distributorCode": distributor_code,
@@ -526,10 +530,12 @@ class DatadisConnector:
         authorized_nif: str | None = None,
     ):
         """Datadis get_max_power query (sync wrapper)."""
-        return asyncio.run(self.async_get_max_power(
-            cups,
-            distributor_code,
-            start_date,
-            end_date,
-            authorized_nif,
-        ))
+        return asyncio.run(
+            self.async_get_max_power(
+                cups,
+                distributor_code,
+                start_date,
+                end_date,
+                authorized_nif,
+            )
+        )

@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 
 from ..connectors.redata import REDataConnector
 
+
 def test_get_realtime_prices():
     """Test a successful 'get_realtime_prices' query"""
     connector = REDataConnector()

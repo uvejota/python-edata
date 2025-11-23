@@ -29,6 +29,7 @@ PRICING_RULES_PVPC = PricingRules(
     p3_kwh_eur=None,
 )
 
+
 @freeze_time(AT_TIME)
 def test_helper_offline(snapshot) -> None:
     """Tests EdataHelper (syrupy snapshot)"""

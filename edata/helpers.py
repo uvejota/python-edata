@@ -110,7 +110,7 @@ class EdataHelper:
         incremental_update: bool = True,
     ):
         """Async call of update method."""
-        
+
         _LOGGER.info(
             "%s: update triggered",
             self._scups,
@@ -124,14 +124,18 @@ class EdataHelper:
         # update redata resources if pvpc is requested
         if self.is_pvpc:
             try:
-                await self.update_redata (date_from, date_to)
+                await self.update_redata(date_from, date_to)
             except requests.exceptions.Timeout:
                 _LOGGER.error("Timeout exception while updating from REData")
 
-        await asyncio.to_thread(self.process_data, incremental_update=incremental_update)
+        await asyncio.to_thread(
+            self.process_data, incremental_update=incremental_update
+        )
 
         if self._must_dump:
-            await asyncio.to_thread(dump_storage, self._cups, self.data, self._storage_dir)
+            await asyncio.to_thread(
+                dump_storage, self._cups, self.data, self._storage_dir
+            )
 
     def update(
         self,
@@ -420,7 +424,9 @@ class EdataHelper:
                 gap["from"],
             )
             while len(prices) == 0 and gap["from"] < gap["to"]:
-                prices = await self.redata_api.async_get_realtime_prices(gap["from"], gap["to"])
+                prices = await self.redata_api.async_get_realtime_prices(
+                    gap["from"], gap["to"]
+                )
                 gap["from"] = gap["from"] + timedelta(days=1)
             self.data["pvpc"] = utils.extend_by_key(
                 self.data["pvpc"], prices, "datetime"

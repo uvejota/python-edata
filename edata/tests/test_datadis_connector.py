@@ -70,8 +70,11 @@ MAXIMETER_RESPONSE = [
     },
 ]
 
+
 @patch("aiohttp.ClientSession.get")
-@patch.object(DatadisConnector, "_async_get_token", new_callable=AsyncMock, return_value=True)
+@patch.object(
+    DatadisConnector, "_async_get_token", new_callable=AsyncMock, return_value=True
+)
 def test_get_supplies(mock_token, mock_get, snapshot):
     """Test a successful 'get_supplies' query (syrupy snapshot)."""
     mock_response = MagicMock()
@@ -83,9 +86,10 @@ def test_get_supplies(mock_token, mock_get, snapshot):
     assert connector.get_supplies() == snapshot
 
 
-
 @patch("aiohttp.ClientSession.get")
-@patch.object(DatadisConnector, "_async_get_token", new_callable=AsyncMock, return_value=True)
+@patch.object(
+    DatadisConnector, "_async_get_token", new_callable=AsyncMock, return_value=True
+)
 def test_get_contract_detail(mock_token, mock_get, snapshot):
     """Test a successful 'get_contract_detail' query (syrupy snapshot)."""
     mock_response = MagicMock()
@@ -97,9 +101,10 @@ def test_get_contract_detail(mock_token, mock_get, snapshot):
     assert connector.get_contract_detail("ESXXXXXXXXXXXXXXXXTEST", "2") == snapshot
 
 
-
 @patch("aiohttp.ClientSession.get")
-@patch.object(DatadisConnector, "_async_get_token", new_callable=AsyncMock, return_value=True)
+@patch.object(
+    DatadisConnector, "_async_get_token", new_callable=AsyncMock, return_value=True
+)
 def test_get_consumption_data(mock_token, mock_get, snapshot):
     """Test a successful 'get_consumption_data' query (syrupy snapshot)."""
     mock_response = MagicMock()
@@ -108,19 +113,23 @@ def test_get_consumption_data(mock_token, mock_get, snapshot):
     mock_response.json = AsyncMock(return_value=CONSUMPTIONS_RESPONSE)
     mock_get.return_value.__aenter__.return_value = mock_response
     connector = DatadisConnector(MOCK_USERNAME, MOCK_PASSWORD)
-    assert connector.get_consumption_data(
-        "ESXXXXXXXXXXXXXXXXTEST",
-        "2",
-        datetime.datetime(2022, 10, 22, 0, 0, 0),
-        datetime.datetime(2022, 10, 22, 2, 0, 0),
-        "0",
-        5,
-    ) == snapshot
-
+    assert (
+        connector.get_consumption_data(
+            "ESXXXXXXXXXXXXXXXXTEST",
+            "2",
+            datetime.datetime(2022, 10, 22, 0, 0, 0),
+            datetime.datetime(2022, 10, 22, 2, 0, 0),
+            "0",
+            5,
+        )
+        == snapshot
+    )
 
 
 @patch("aiohttp.ClientSession.get")
-@patch.object(DatadisConnector, "_async_get_token", new_callable=AsyncMock, return_value=True)
+@patch.object(
+    DatadisConnector, "_async_get_token", new_callable=AsyncMock, return_value=True
+)
 def test_get_max_power(mock_token, mock_get, snapshot):
     """Test a successful 'get_max_power' query (syrupy snapshot)."""
     mock_response = MagicMock()
@@ -129,17 +138,22 @@ def test_get_max_power(mock_token, mock_get, snapshot):
     mock_response.json = AsyncMock(return_value=MAXIMETER_RESPONSE)
     mock_get.return_value.__aenter__.return_value = mock_response
     connector = DatadisConnector(MOCK_USERNAME, MOCK_PASSWORD)
-    assert connector.get_max_power(
-        "ESXXXXXXXXXXXXXXXXTEST",
-        "2",
-        datetime.datetime(2022, 3, 1, 0, 0, 0),
-        datetime.datetime(2022, 4, 1, 0, 0, 0),
-        None,
-    ) == snapshot
+    assert (
+        connector.get_max_power(
+            "ESXXXXXXXXXXXXXXXXTEST",
+            "2",
+            datetime.datetime(2022, 3, 1, 0, 0, 0),
+            datetime.datetime(2022, 4, 1, 0, 0, 0),
+            None,
+        )
+        == snapshot
+    )
 
 
 @patch("aiohttp.ClientSession.get")
-@patch.object(DatadisConnector, "_async_get_token", new_callable=AsyncMock, return_value=True)
+@patch.object(
+    DatadisConnector, "_async_get_token", new_callable=AsyncMock, return_value=True
+)
 def test_get_supplies_empty_response(mock_token, mock_get, snapshot):
     """Test get_supplies with empty response (syrupy snapshot)."""
     mock_response = MagicMock()
@@ -152,7 +166,9 @@ def test_get_supplies_empty_response(mock_token, mock_get, snapshot):
 
 
 @patch("aiohttp.ClientSession.get")
-@patch.object(DatadisConnector, "_async_get_token", new_callable=AsyncMock, return_value=True)
+@patch.object(
+    DatadisConnector, "_async_get_token", new_callable=AsyncMock, return_value=True
+)
 def test_get_supplies_malformed_response(mock_token, mock_get, snapshot):
     """Test get_supplies with malformed response (missing required fields, syrupy snapshot)."""
     malformed = [{"validDateFrom": "2022/03/09"}]  # missing 'cups', etc.
@@ -166,7 +182,9 @@ def test_get_supplies_malformed_response(mock_token, mock_get, snapshot):
 
 
 @patch("aiohttp.ClientSession.get")
-@patch.object(DatadisConnector, "_async_get_token", new_callable=AsyncMock, return_value=True)
+@patch.object(
+    DatadisConnector, "_async_get_token", new_callable=AsyncMock, return_value=True
+)
 def test_get_supplies_partial_response(mock_token, mock_get, snapshot):
     """Test get_supplies with partial valid/invalid response (syrupy snapshot)."""
     partial = [
@@ -182,9 +200,10 @@ def test_get_supplies_partial_response(mock_token, mock_get, snapshot):
     assert connector.get_supplies() == snapshot
 
 
-
 @patch("aiohttp.ClientSession.get")
-@patch.object(DatadisConnector, "_async_get_token", new_callable=AsyncMock, return_value=True)
+@patch.object(
+    DatadisConnector, "_async_get_token", new_callable=AsyncMock, return_value=True
+)
 def test_get_consumption_data_cache(mock_token, mock_get, snapshot):
     """Test get_consumption_data uses cache on second call (should not call HTTP again, syrupy snapshot)."""
     mock_response = MagicMock()
@@ -194,29 +213,37 @@ def test_get_consumption_data_cache(mock_token, mock_get, snapshot):
     mock_get.return_value.__aenter__.return_value = mock_response
     connector = DatadisConnector(MOCK_USERNAME, MOCK_PASSWORD)
     # First call populates cache
-    assert connector.get_consumption_data(
-        "ESXXXXXXXXXXXXXXXXTEST",
-        "2",
-        datetime.datetime(2022, 10, 22, 0, 0, 0),
-        datetime.datetime(2022, 10, 22, 2, 0, 0),
-        "0",
-        5,
-    ) == snapshot
+    assert (
+        connector.get_consumption_data(
+            "ESXXXXXXXXXXXXXXXXTEST",
+            "2",
+            datetime.datetime(2022, 10, 22, 0, 0, 0),
+            datetime.datetime(2022, 10, 22, 2, 0, 0),
+            "0",
+            5,
+        )
+        == snapshot
+    )
     # Second call should use cache, not call HTTP again
     mock_get.reset_mock()
-    assert connector.get_consumption_data(
-        "ESXXXXXXXXXXXXXXXXTEST",
-        "2",
-        datetime.datetime(2022, 10, 22, 0, 0, 0),
-        datetime.datetime(2022, 10, 22, 2, 0, 0),
-        "0",
-        5,
-    ) == snapshot
+    assert (
+        connector.get_consumption_data(
+            "ESXXXXXXXXXXXXXXXXTEST",
+            "2",
+            datetime.datetime(2022, 10, 22, 0, 0, 0),
+            datetime.datetime(2022, 10, 22, 2, 0, 0),
+            "0",
+            5,
+        )
+        == snapshot
+    )
     mock_get.assert_not_called()
 
 
 @patch("aiohttp.ClientSession.get")
-@patch.object(DatadisConnector, "_async_get_token", new_callable=AsyncMock, return_value=True)
+@patch.object(
+    DatadisConnector, "_async_get_token", new_callable=AsyncMock, return_value=True
+)
 def test_get_supplies_optional_fields_none(mock_token, mock_get, snapshot):
     """Test get_supplies with optional fields as None (syrupy snapshot)."""
     response = [

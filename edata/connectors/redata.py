@@ -58,7 +58,9 @@ class REDataConnector:
                         for element in res_list:
                             data.append(
                                 EnergyPrice(
-                                    datetime=parser.parse(element["datetime"]).replace(tzinfo=None),
+                                    datetime=parser.parse(element["datetime"]).replace(
+                                        tzinfo=None
+                                    ),
                                     value_eur_kWh=element["value"] / 1000,
                                     delta_h=1,
                                 )
@@ -78,4 +80,6 @@ class REDataConnector:
         self, dt_from: dt.datetime, dt_to: dt.datetime, is_ceuta_melilla: bool = False
     ) -> list:
         """GET query to fetch realtime pvpc prices, historical data is limited to current month (sync wrapper)"""
-        return asyncio.run(self.async_get_realtime_prices(dt_from, dt_to, is_ceuta_melilla))
+        return asyncio.run(
+            self.async_get_realtime_prices(dt_from, dt_to, is_ceuta_melilla)
+        )
