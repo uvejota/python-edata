@@ -204,8 +204,13 @@ class DatadisConnector:
                     value = data[anonym_param]
                 anonym_params = anonym_params + f"{key}={value}&"
 
-            if not ignore_recent_queries and self._is_recent_query(url + params):
-                _cache = self._get_cache_for_query(url + params)
+            is_recent_query = await asyncio.to_thread(
+                self._is_recent_query, url + params
+            )
+            if not ignore_recent_queries and is_recent_query:
+                _cache = await asyncio.to_thread(
+                    self._get_cache_for_query, url + params
+                )
                 if _cache is not None:
                     _LOGGER.info(
                         "Returning cached response for '%s'", url + anonym_params
@@ -232,13 +237,17 @@ class DatadisConnector:
                                 if json_data:
                                     response = json_data
                                     if not ignore_recent_queries:
-                                        self._update_recent_queries(
-                                            url + params, response
+                                        await asyncio.to_thread(
+                                            self._update_recent_queries,
+                                            url + params,
+                                            response,
                                         )
                                 else:
                                     _LOGGER.info("Got an empty response")
                                     if not ignore_recent_queries:
-                                        self._update_recent_queries(url + params)
+                                        await asyncio.to_thread(
+                                            self._update_recent_queries, url + params
+                                        )
                             except Exception as e:
                                 _LOGGER.warning("Failed to parse JSON response")
                         elif reply.status == 401 and not refresh_token:
@@ -255,7 +264,9 @@ class DatadisConnector:
                                 text,
                             )
                             if not ignore_recent_queries:
-                                self._update_recent_queries(url + params)
+                                await asyncio.to_thread(
+                                    self._update_recent_queries, url + params
+                                )
                         elif is_retry:
                             if (url + params) not in self._warned_queries:
                                 _LOGGER.warning(
@@ -266,7 +277,9 @@ class DatadisConnector:
                                     "Future 500 code errors for this query will be silenced until restart",
                                 )
                             if not ignore_recent_queries:
-                                self._update_recent_queries(url + params)
+                                await asyncio.to_thread(
+                                    self._update_recent_queries, url + params
+                                )
                             self._warned_queries.append(url + params)
                         else:
                             response = await self._async_get(
