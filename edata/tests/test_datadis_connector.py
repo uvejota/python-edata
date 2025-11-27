@@ -1,11 +1,9 @@
 """Tests for DatadisConnector (offline)."""
 
 import datetime
-import datetime
-from unittest.mock import patch, AsyncMock, MagicMock
-from ..connectors.datadis import DatadisConnector
+from unittest.mock import AsyncMock, MagicMock, patch
 
-from ..connectors.datadis import DatadisConnector
+from edata.providers.datadis import DatadisConnector
 
 MOCK_USERNAME = "USERNAME"
 MOCK_PASSWORD = "PASSWORD"
@@ -76,7 +74,7 @@ MAXIMETER_RESPONSE = [
     DatadisConnector, "_async_get_token", new_callable=AsyncMock, return_value=True
 )
 def test_get_supplies(mock_token, mock_get, snapshot):
-    """Test a successful 'get_supplies' query (syrupy snapshot)."""
+    """Test a successful 'get_supplies' query."""
     mock_response = MagicMock()
     mock_response.status = 200
     mock_response.text = AsyncMock(return_value="text")
@@ -91,7 +89,7 @@ def test_get_supplies(mock_token, mock_get, snapshot):
     DatadisConnector, "_async_get_token", new_callable=AsyncMock, return_value=True
 )
 def test_get_contract_detail(mock_token, mock_get, snapshot):
-    """Test a successful 'get_contract_detail' query (syrupy snapshot)."""
+    """Test a successful 'get_contract_detail' query."""
     mock_response = MagicMock()
     mock_response.status = 200
     mock_response.text = AsyncMock(return_value="text")
@@ -106,7 +104,7 @@ def test_get_contract_detail(mock_token, mock_get, snapshot):
     DatadisConnector, "_async_get_token", new_callable=AsyncMock, return_value=True
 )
 def test_get_consumption_data(mock_token, mock_get, snapshot):
-    """Test a successful 'get_consumption_data' query (syrupy snapshot)."""
+    """Test a successful 'get_consumption_data' query."""
     mock_response = MagicMock()
     mock_response.status = 200
     mock_response.text = AsyncMock(return_value="text")
@@ -131,7 +129,7 @@ def test_get_consumption_data(mock_token, mock_get, snapshot):
     DatadisConnector, "_async_get_token", new_callable=AsyncMock, return_value=True
 )
 def test_get_max_power(mock_token, mock_get, snapshot):
-    """Test a successful 'get_max_power' query (syrupy snapshot)."""
+    """Test a successful 'get_max_power' query."""
     mock_response = MagicMock()
     mock_response.status = 200
     mock_response.text = AsyncMock(return_value="text")
@@ -155,7 +153,7 @@ def test_get_max_power(mock_token, mock_get, snapshot):
     DatadisConnector, "_async_get_token", new_callable=AsyncMock, return_value=True
 )
 def test_get_supplies_empty_response(mock_token, mock_get, snapshot):
-    """Test get_supplies with empty response (syrupy snapshot)."""
+    """Test get_supplies with empty response."""
     mock_response = MagicMock()
     mock_response.status = 200
     mock_response.text = AsyncMock(return_value="text")
@@ -186,7 +184,7 @@ def test_get_supplies_malformed_response(mock_token, mock_get, snapshot):
     DatadisConnector, "_async_get_token", new_callable=AsyncMock, return_value=True
 )
 def test_get_supplies_partial_response(mock_token, mock_get, snapshot):
-    """Test get_supplies with partial valid/invalid response (syrupy snapshot)."""
+    """Test get_supplies with partial valid/invalid response."""
     partial = [
         SUPPLIES_RESPONSE[0],
         {"validDateFrom": "2022/03/09"},  # invalid
@@ -245,7 +243,7 @@ def test_get_consumption_data_cache(mock_token, mock_get, snapshot):
     DatadisConnector, "_async_get_token", new_callable=AsyncMock, return_value=True
 )
 def test_get_supplies_optional_fields_none(mock_token, mock_get, snapshot):
-    """Test get_supplies with optional fields as None (syrupy snapshot)."""
+    """Test get_supplies with optional fields as None."""
     response = [
         {
             "cups": "ESXXXXXXXXXXXXXXXXTEST",

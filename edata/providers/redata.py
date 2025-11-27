@@ -1,10 +1,10 @@
 """A REData API connector"""
 
+import asyncio
 import datetime as dt
 import logging
 
 import aiohttp
-import asyncio
 from dateutil import parser
 
 from edata.models import EnergyPrice
@@ -39,6 +39,7 @@ class REDataConnector:
             end=dt_to,
         )
         data = []
+        _LOGGER.info("GET %s", url)
         timeout = aiohttp.ClientTimeout(total=REQUESTS_TIMEOUT)
         async with aiohttp.ClientSession(timeout=timeout) as session:
             try:

@@ -6,23 +6,19 @@ There a few issues that are workarounded:
  - Datadis server does not like ranges greater than 1 month.
 """
 
+import asyncio
 import contextlib
-from datetime import datetime, timedelta
-
 import hashlib
 import logging
 import os
 import tempfile
 import typing
-import diskcache
-
-from dateutil.relativedelta import relativedelta
+from datetime import datetime, timedelta
 
 import aiohttp
-import asyncio
+import diskcache
 
-from edata.models import Supply, Contract, Energy, Power
-from ..processors import utils
+from edata.models import Contract, Energy, Power, Supply
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -58,9 +54,6 @@ GET_CONSUMPTION_DATA_MANDATORY_FIELDS = [
     "consumptionKWh",
     "obtainMethod",
 ]
-MAX_CONSUMPTIONS_MONTHS = (
-    1  # max consumptions in a single request (fixed to 1 due to datadis limitations)
-)
 
 # Maximeter-related constants
 URL_GET_MAX_POWER = "https://datadis.es/api-private/api/get-max-power"
@@ -109,23 +102,28 @@ class DatadisConnector:
         os.makedirs(self._recent_cache_dir, exist_ok=True)
         self._cache = diskcache.Cache(self._recent_cache_dir)
 
-    def _update_recent_queries(self, query: str, data: dict | None = None) -> None:
+    def _get_hash(self, item: str):
+        """Return a hash."""
+
+        return hashlib.md5(item.encode()).hexdigest()
+
+    def _set_cache(self, key: str, data: dict | None = None) -> None:
         """Cache a successful query to avoid exceeding query limits (diskcache)."""
-        hash_query = hashlib.md5(query.encode()).hexdigest()
+        hash_query = self._get_hash(key)
         try:
             self._cache.set(hash_query, data, expire=QUERY_LIMIT.total_seconds())
-            _LOGGER.info("Updating cache item '%s'", hash_query)
+            _LOGGER.debug("Updating cache item '%s'", hash_query)
         except Exception as e:
             _LOGGER.warning("Unknown error while updating cache: %s", e)
 
-    def _is_recent_query(self, query: str) -> bool:
+    def _is_cached(self, key: str) -> bool:
         """Check if a query has been done recently to avoid exceeding query limits (diskcache)."""
-        hash_query = hashlib.md5(query.encode()).hexdigest()
+        hash_query = self._get_hash(key)
         return hash_query in self._cache
 
-    def _get_cache_for_query(self, query: str):
+    def _get_cache(self, key: str):
         """Return cached response for a query (diskcache)."""
-        hash_query = hashlib.md5(query.encode()).hexdigest()
+        hash_query = self._get_hash(key)
         try:
             return self._cache.get(hash_query, default=None)
         except Exception:
@@ -133,7 +131,7 @@ class DatadisConnector:
 
     async def _async_get_token(self):
         """Private async method that fetches a new token if needed."""
-        _LOGGER.info("No token found, fetching a new one")
+        _LOGGER.debug("No token found, fetching a new one")
         is_valid_token = False
         timeout = aiohttp.ClientTimeout(total=TIMEOUT)
         async with aiohttp.ClientSession(timeout=timeout) as session:
@@ -174,7 +172,7 @@ class DatadisConnector:
         request_data: dict | None = None,
         refresh_token: bool = False,
         is_retry: bool = False,
-        ignore_recent_queries: bool = False,
+        ignore_cache: bool = False,
     ) -> list[dict[str, typing.Any]]:
         """Async get request for Datadis API."""
 
@@ -204,17 +202,11 @@ class DatadisConnector:
                     value = data[anonym_param]
                 anonym_params = anonym_params + f"{key}={value}&"
 
-            is_recent_query = await asyncio.to_thread(
-                self._is_recent_query, url + params
-            )
-            if not ignore_recent_queries and is_recent_query:
-                _cache = await asyncio.to_thread(
-                    self._get_cache_for_query, url + params
-                )
+            is_recent_query = await asyncio.to_thread(self._is_cached, url + params)
+            if not ignore_cache and is_recent_query:
+                _cache = await asyncio.to_thread(self._get_cache, url + params)
                 if _cache is not None:
-                    _LOGGER.info(
-                        "Returning cached response for '%s'", url + anonym_params
-                    )
+                    _LOGGER.info("CACHED %s", url + anonym_params)
                     return _cache  # type: ignore
                 return []
 
@@ -231,62 +223,59 @@ class DatadisConnector:
                     ) as reply:
                         text = await reply.text()
                         if reply.status == 200:
-                            _LOGGER.info("Got 200 OK")
                             try:
                                 json_data = await reply.json(content_type=None)
                                 if json_data:
                                     response = json_data
-                                    if not ignore_recent_queries:
+                                    if not ignore_cache:
                                         await asyncio.to_thread(
-                                            self._update_recent_queries,
+                                            self._set_cache,
                                             url + params,
                                             response,
                                         )
                                 else:
-                                    _LOGGER.info("Got an empty response")
-                                    if not ignore_recent_queries:
+                                    _LOGGER.info("200 OK but empty response")
+                                    if not ignore_cache:
                                         await asyncio.to_thread(
-                                            self._update_recent_queries, url + params
+                                            self._set_cache, url + params
                                         )
                             except Exception as e:
-                                _LOGGER.warning("Failed to parse JSON response")
+                                _LOGGER.warning(
+                                    "200 OK but failed to parse the response"
+                                )
                         elif reply.status == 401 and not refresh_token:
                             response = await self._async_get(
                                 url,
                                 request_data=data,
                                 refresh_token=True,
-                                ignore_recent_queries=ignore_recent_queries,
+                                ignore_cache=ignore_cache,
                             )
                         elif reply.status == 429:
                             _LOGGER.warning(
-                                "Got status code '%s' with message '%s'",
+                                "%s with message '%s'",
                                 reply.status,
                                 text,
                             )
-                            if not ignore_recent_queries:
-                                await asyncio.to_thread(
-                                    self._update_recent_queries, url + params
-                                )
+                            if not ignore_cache:
+                                await asyncio.to_thread(self._set_cache, url + params)
                         elif is_retry:
                             if (url + params) not in self._warned_queries:
                                 _LOGGER.warning(
-                                    "Got status code '%s' with message '%s'. %s. %s",
+                                    "%s with message '%s'. %s. %s",
                                     reply.status,
                                     text,
                                     "Query temporary disabled",
                                     "Future 500 code errors for this query will be silenced until restart",
                                 )
-                            if not ignore_recent_queries:
-                                await asyncio.to_thread(
-                                    self._update_recent_queries, url + params
-                                )
+                            if not ignore_cache:
+                                await asyncio.to_thread(self._set_cache, url + params)
                             self._warned_queries.append(url + params)
                         else:
                             response = await self._async_get(
                                 url,
                                 request_data,
                                 is_retry=True,
-                                ignore_recent_queries=ignore_recent_queries,
+                                ignore_cache=ignore_cache,
                             )
             except asyncio.TimeoutError:
                 _LOGGER.warning("Timeout at %s", url + anonym_params)
@@ -303,7 +292,7 @@ class DatadisConnector:
         if authorized_nif is not None:
             data["authorizedNif"] = authorized_nif
         response = await self._async_get(
-            URL_GET_SUPPLIES, request_data=data, ignore_recent_queries=True
+            URL_GET_SUPPLIES, request_data=data, ignore_cache=True
         )
         supplies = []
         tomorrow_str = (datetime.today() + timedelta(days=1)).strftime("%Y/%m/%d")
@@ -355,7 +344,7 @@ class DatadisConnector:
         if authorized_nif is not None:
             data["authorizedNif"] = authorized_nif
         response = await self._async_get(
-            URL_GET_CONTRACT_DETAIL, request_data=data, ignore_recent_queries=True
+            URL_GET_CONTRACT_DETAIL, request_data=data, ignore_cache=True
         )
         contracts = []
         tomorrow_str = (datetime.today() + timedelta(days=1)).strftime("%Y/%m/%d")
@@ -409,32 +398,7 @@ class DatadisConnector:
         measurement_type: str,
         point_type: int,
         authorized_nif: str | None = None,
-        is_smart_fetch: bool = False,
     ) -> list[Energy]:
-        if self._smart_fetch and not is_smart_fetch:
-            _start = start_date
-            consumptions = []
-            while _start < end_date:
-                _end = min(
-                    _start + relativedelta(months=MAX_CONSUMPTIONS_MONTHS), end_date
-                )
-                sub_consumptions = await self.async_get_consumption_data(
-                    cups,
-                    distributor_code,
-                    _start,
-                    _end,
-                    measurement_type,
-                    point_type,
-                    authorized_nif,
-                    is_smart_fetch=True,
-                )
-                consumptions = utils.extend_by_key(
-                    consumptions,
-                    sub_consumptions,
-                    "datetime",
-                )
-                _start = _end
-            return consumptions
 
         data = {
             "cups": cups,
@@ -487,7 +451,6 @@ class DatadisConnector:
         measurement_type: str,
         point_type: int,
         authorized_nif: str | None = None,
-        is_smart_fetch: bool = False,
     ):
         """Datadis get_consumption_data query (sync wrapper)."""
         return asyncio.run(
@@ -499,7 +462,6 @@ class DatadisConnector:
                 measurement_type,
                 point_type,
                 authorized_nif,
-                is_smart_fetch,
             )
         )
 

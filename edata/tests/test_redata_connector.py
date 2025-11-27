@@ -1,8 +1,8 @@
-"""Tests for REData (online)"""
+"""Tests for REDataConnector (online)"""
 
 from datetime import datetime, timedelta
 
-from ..connectors.redata import REDataConnector
+from edata.providers.redata import REDataConnector
 
 
 def test_get_realtime_prices():

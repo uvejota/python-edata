@@ -9,13 +9,22 @@ import os
 from dateutil.relativedelta import relativedelta
 import requests
 
+from edata.services.data_service import DataService
+
 from . import const
-from .connectors.datadis import DatadisConnector
-from .connectors.redata import REDataConnector
-from .definitions import ATTRIBUTES, EdataData, PricingRules
+from .providers.redata import REDataConnector
+from .definitions import (
+    ATTRIBUTES,
+    ConsumptionAggData,
+    ConsumptionData,
+    ContractData,
+    EdataData,
+    MaxPowerData,
+    PricingRules,
+    SupplyData,
+)
 from .processors import utils
 from .processors.billing import BillingInput, BillingProcessor
-from .processors.consumption import ConsumptionProcessor
 from .processors.maximeter import MaximeterProcessor
 from .storage import check_storage_integrity, dump_storage, load_storage
 
@@ -77,15 +86,18 @@ class EdataHelper:
         for attr in ATTRIBUTES:
             self.attributes[attr] = None
 
-        self.datadis_api = DatadisConnector(
+        self.data_service = DataService(
+            cups,
             datadis_username,
             datadis_password,
+            datadis_authorized_nif,
             storage_path=(
                 os.path.join(storage_dir_path, const.PROG_NAME)
                 if storage_dir_path is not None
                 else None
             ),
         )
+
         self.redata_api = REDataConnector()
 
         self.pricing_rules = pricing_rules
@@ -119,7 +131,29 @@ class EdataHelper:
         self._date_to = date_to
 
         # update datadis resources
-        await self.update_datadis(self._cups, date_from, date_to)
+        # TODO replace with DataService
+        await self.data_service.update(date_from, date_to)
+
+        self.data["supplies"] = [
+            SupplyData(**x.model_dump()) for x in self.data_service._supplies
+        ]
+        self.data["contracts"] = [
+            ContractData(**x.model_dump()) for x in self.data_service._contracts
+        ]
+        self.data["consumptions"] = [
+            ConsumptionData(**x.model_dump()) for x in self.data_service._energy
+        ]
+        self.data["maximeter"] = [
+            MaxPowerData(**x.model_dump()) for x in self.data_service._power
+        ]
+        self.data["consumptions_daily_sum"] = [
+            ConsumptionAggData(**x.model_dump())
+            for x in await self.data_service.get_statistics("day")
+        ]
+        self.data["consumptions_monthly_sum"] = [
+            ConsumptionAggData(**x.model_dump())
+            for x in await self.data_service.get_statistics("month")
+        ]
 
         # update redata resources if pvpc is requested
         if self.is_pvpc:
@@ -146,254 +180,6 @@ class EdataHelper:
         """Update synchronously."""
 
         asyncio.run(self.async_update(date_from, date_to, incremental_update))
-
-    async def update_supplies(self):
-        """Update supplies."""
-
-        _LOGGER.debug("%s: supplies update triggered", self._scups)
-        if datetime.today().date() != self.last_update["supplies"].date():
-            # if supplies haven't been updated today
-            supplies = await self.datadis_api.async_get_supplies(
-                authorized_nif=self._authorized_nif
-            )  # fetch supplies
-            supplies = [s.model_dump() for s in supplies]
-            if len(supplies) > 0:
-                self.data["supplies"] = supplies
-                # if we got something, update last_update flag
-                self.last_update["supplies"] = datetime.now()
-                _LOGGER.info("%s: supplies update succeeded", self._scups)
-        else:
-            _LOGGER.info("%s: supplies are already updated (skipping)", self._scups)
-
-    async def update_contracts(self, cups: str, distributor_code: str):
-        """Update contracts."""
-
-        _LOGGER.debug("%s: contracts update triggered", self._scups)
-        if datetime.today().date() != self.last_update["contracts"].date():
-            # if contracts haven't been updated today
-            contracts = await self.datadis_api.async_get_contract_detail(
-                cups, distributor_code, authorized_nif=self._authorized_nif
-            )
-            contracts = [c.model_dump() for c in contracts]
-            if len(contracts) > 0:
-                self.data["contracts"] = utils.extend_by_key(
-                    self.data["contracts"], contracts, "date_start"
-                )  # extend contracts data with new ones
-                # if we got something, update last_update flag
-                self.last_update["contracts"] = datetime.now()
-                _LOGGER.info("%s: contracts update succeeded", self._scups)
-        else:
-            _LOGGER.info("%s: contracts are already updated (skipping)", self._scups)
-
-    async def update_consumptions(
-        self,
-        cups: str,
-        distributor_code: str,
-        start_date: datetime,
-        end_date: datetime,
-        measurement_type: str,
-        point_type: int,
-    ):
-        """Update consumptions."""
-
-        _LOGGER.debug("%s: consumptions update triggered", self._scups)
-        if (datetime.now() - self.last_update["consumptions"]) > self.UPDATE_INTERVAL:
-            consumptions = await self.datadis_api.async_get_consumption_data(
-                cups,
-                distributor_code,
-                start_date,
-                end_date,
-                measurement_type,
-                point_type,
-                authorized_nif=self._authorized_nif,
-            )
-            consumptions = [c.model_dump() for c in consumptions]
-            if len(consumptions) > 0:
-                _LOGGER.info(
-                    "%s: got consumptions from %s to %s",
-                    self._scups,
-                    consumptions[0]["datetime"].isoformat(),
-                    consumptions[-1]["datetime"].isoformat(),
-                )
-                self.data["consumptions"] = utils.extend_by_key(
-                    self.data["consumptions"], consumptions, "datetime"
-                )
-                self.last_update["consumptions"] = datetime.now()
-            else:
-                _LOGGER.info("%s: consumptions are up to date", self._scups)
-        else:
-            _LOGGER.info("%s: consumptions are already updated (skipping)", self._scups)
-
-    async def update_maximeter(self, cups, distributor_code, start_date, end_date):
-        """Update maximeter."""
-
-        _LOGGER.debug("%s: maximeter update triggered", self._scups)
-        if (datetime.now() - self.last_update["maximeter"]) > self.UPDATE_INTERVAL:
-            maximeter = await self.datadis_api.async_get_max_power(
-                cups,
-                distributor_code,
-                start_date,
-                end_date,
-                authorized_nif=self._authorized_nif,
-            )
-            maximeter = [m.model_dump() for m in maximeter]
-            if len(maximeter) > 0:
-                _LOGGER.info(
-                    "%s: maximeter update succeeded",
-                    self._scups,
-                )
-                self.data["maximeter"] = utils.extend_by_key(
-                    self.data["maximeter"], maximeter, "datetime"
-                )
-                self.last_update["maximeter"] = datetime.now()
-            else:
-                _LOGGER.info("%s: maximeter is up to date", self._scups)
-        else:
-            _LOGGER.info("%s: maximeter is already updated (skipping)", self._scups)
-
-    async def update_datadis(
-        self,
-        cups: str,
-        date_from: datetime = datetime(1970, 1, 1),
-        date_to: datetime = datetime.today(),
-    ):
-        """Update all data from Datadis."""
-
-        _LOGGER.info(
-            "%s: datadis update triggered (from %s to %s)",
-            self._scups,
-            date_from.isoformat(),
-            date_to.isoformat(),
-        )
-
-        # update supplies and get distributorCode
-        await self.update_supplies()
-
-        if len(self.data["supplies"]) == 0:
-            # return if no supplies were discovered
-            _LOGGER.warning(
-                "%s: supplies update failed or no supplies found in the provided account",
-                self._scups,
-            )
-            return False
-
-        # find requested cups in supplies
-        supply = utils.get_by_key(self.data["supplies"], "cups", cups)
-        if supply is None:
-            # return if specified cups seems not valid
-            _LOGGER.error(
-                "%s: CUPS not found. Got: %s",
-                self._scups,
-                [acups(x["cups"]) for x in self.data["supplies"]],
-            )
-            return False
-        _LOGGER.info("%s: CUPS found in account", self._scups)
-
-        # get some supply-related data
-        supply_date_start = supply["date_start"]
-        distributor_code = supply["distributorCode"]
-        point_type = supply["pointType"]
-
-        _LOGGER.info(
-            "%s: CUPS start date is %s", self._scups, supply_date_start.isoformat()
-        )
-        _LOGGER.info(
-            "%s: CUPS end date is %s", self._scups, supply["date_end"].isoformat()
-        )
-
-        # update contracts to get valid periods
-        await self.update_contracts(cups, distributor_code)
-        if len(self.data["contracts"]) == 0:
-            _LOGGER.warning(
-                "%s: contracts update failed or no contracts found in the provided account",
-                self._scups,
-            )
-            # return False
-
-        # filter consumptions and maximeter, and log gaps
-        def sort_and_filter(dt_from, dt_to):
-            self.data["consumptions"], miss_cons = utils.extract_dt_ranges(
-                self.data["consumptions"],
-                dt_from,
-                dt_to,
-                gap_interval=timedelta(hours=6),
-            )
-            self.data["maximeter"], miss_maxim = utils.extract_dt_ranges(
-                self.data["maximeter"],
-                dt_from,
-                dt_to,
-                gap_interval=timedelta(days=60),
-            )
-            return miss_cons, miss_maxim
-
-        miss_cons, miss_maxim = sort_and_filter(date_from, date_to)
-
-        # update consumptions
-        _LOGGER.info(
-            "%s: missing consumptions: %s",
-            self._scups,
-            ", ".join(
-                [
-                    "from "
-                    + (x["from"] + timedelta(hours=1)).isoformat()
-                    + " to "
-                    + x["to"].isoformat()
-                    for x in miss_cons
-                ]
-            ),
-        )
-        for gap in miss_cons:
-            if not (
-                gap["to"] < supply["date_start"] or gap["from"] > supply["date_end"]
-            ):
-                # fetch consumptions for each consumptions gap in valid periods
-                start = max([gap["from"] + timedelta(hours=1), supply["date_start"]])
-                end = min([gap["to"], supply["date_end"]])
-                _LOGGER.info(
-                    "%s: requesting consumptions from %s to %s",
-                    self._scups,
-                    start.isoformat(),
-                    end.isoformat(),
-                )
-                await self.update_consumptions(
-                    cups,
-                    distributor_code,
-                    start,
-                    end,
-                    "0",
-                    point_type,
-                )
-
-        # update maximeter
-        _LOGGER.info(
-            "%s: missing maximeter: %s",
-            self._scups,
-            ", ".join(
-                [
-                    "from " + x["from"].isoformat() + " to " + x["to"].isoformat()
-                    for x in miss_maxim
-                ]
-            ),
-        )
-        for gap in miss_maxim:
-            if not (date_to < supply["date_start"] or date_from > supply["date_end"]):
-                # fetch maximeter for each maximeter gap in valid periods
-                start = max(
-                    [gap["from"], supply["date_start"] + relativedelta(months=1)]
-                )
-                end = min([gap["to"], supply["date_end"]])
-                start = min([start, end])
-                _LOGGER.info(
-                    "%s: requesting maximeter from %s to %s",
-                    self._scups,
-                    start.isoformat(),
-                    end.isoformat(),
-                )
-                await self.update_maximeter(cups, distributor_code, start, end)
-
-        miss_cons, miss_maxim = sort_and_filter(date_from, date_to)
-
-        return True
 
     async def update_redata(
         self,
@@ -483,23 +269,7 @@ class EdataHelper:
     def process_consumptions(self):
         """Process consumptions data."""
         if len(self.data["consumptions"]) > 0:
-            new_data_from = self._date_from
-            if self._incremental_update:
-                with contextlib.suppress(Exception):
-                    new_data_from = self.data["consumptions_monthly_sum"][-1][
-                        "datetime"
-                    ]
 
-            proc = ConsumptionProcessor(
-                {
-                    "consumptions": [
-                        x
-                        for x in self.data["consumptions"]
-                        if x["datetime"] >= new_data_from
-                    ],
-                    "cycle_start_day": 1,
-                }
-            )
             today_starts = datetime(
                 datetime.today().year,
                 datetime.today().month,
@@ -511,22 +281,6 @@ class EdataHelper:
 
             month_starts = datetime(
                 datetime.today().year, datetime.today().month, 1, 0, 0, 0
-            )
-
-            # append new data
-            self.data["consumptions_daily_sum"] = utils.extend_and_filter(
-                self.data["consumptions_daily_sum"],
-                proc.output["daily"],
-                "datetime",
-                self._date_from,
-                self._date_to,
-            )
-            self.data["consumptions_monthly_sum"] = utils.extend_and_filter(
-                self.data["consumptions_monthly_sum"],
-                proc.output["monthly"],
-                "datetime",
-                self._date_from,
-                self._date_to,
             )
 
             yday = utils.get_by_key(

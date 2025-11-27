@@ -1,6 +1,7 @@
 """Models for contractual data"""
 
 from datetime import datetime
+
 from pydantic import BaseModel
 
 
