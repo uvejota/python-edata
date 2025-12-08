@@ -1,0 +1,50 @@
+name: Publish Dev to PyPI
+
+on:
+  push:
+    branches:
+      - dev
+
+jobs:
+  publish-dev:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Necesario para contar commits
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install build tools
+        run: pip install build twine
+
+      - name: Generate dev version
+        id: version
+        run: |
+          # Obtener la versión base del pyproject.toml
+          BASE_VERSION=$(grep -oP 'version = "\K[^"]+' pyproject.toml)
+          # Contar commits desde el último tag o desde el inicio
+          COMMIT_COUNT=$(git rev-list --count HEAD)
+          # Obtener hash corto del commit
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          # Crear versión dev: X.Y.Z.devN+gSHA
+          DEV_VERSION="${BASE_VERSION}.dev${COMMIT_COUNT}+g${SHORT_SHA}"
+          echo "dev_version=${DEV_VERSION}" >> $GITHUB_OUTPUT
+          echo "Building dev version: ${DEV_VERSION}"
+
+      - name: Update version in pyproject.toml
+        run: |
+          sed -i "s/^version = .*/version = \"${{ steps.version.outputs.dev_version }}\"/" pyproject.toml
+          cat pyproject.toml | grep version
+
+      - name: Build package
+        run: python -m build
+
+      - name: Publish to PyPI
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        run: twine upload dist/*
