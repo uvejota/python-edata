@@ -310,7 +310,7 @@ class DataService:
         if end < min_date:
             # end date out of bounds
             return False
-        if (_pvpc_dt:= await self._get_last_pvpc_dt()):
+        if _pvpc_dt := await self._get_last_pvpc_dt():
             start = _pvpc_dt + timedelta(hours=1)
             if start >= end:
                 _LOGGER.info("%s pvpc prices are already synced", self._scups)
@@ -472,7 +472,7 @@ class DataService:
         last_record = await self.db.get_last_pvpc()
         if last_record:
             return last_record.datetime
-        
+
     async def _sync(self):
         """Load state."""
 

@@ -24,9 +24,11 @@ def load_json(filename):
 def load_models(filename, model):
     return [model(**d) for d in load_json(filename)]
 
+
 @pytest.fixture(scope="module")
 def storage_dir():
     return gettempdir()
+
 
 @pytest.fixture(scope="module")
 def supplies():
@@ -66,7 +68,9 @@ async def populated_data_service(mock_connector, energy, power, storage_dir):
     with patch("edata.services.data_service.DatadisConnector") as mock_connector_class:
         mock_connector_class.side_effect = lambda *a, **k: mock_connector
 
-        ds = DataService("ESXXXXXXXXXXXXXXXXTEST", "user", "pwd", storage_path=storage_dir)
+        ds = DataService(
+            "ESXXXXXXXXXXXXXXXXTEST", "user", "pwd", storage_path=storage_dir
+        )
         await ds.login()
         await ds.update_supplies()
         await ds.update_contracts()

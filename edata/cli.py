@@ -46,7 +46,11 @@ async def _download_all(
 
     password = getpass()
     service = DataService(
-        cups, nif, password, datadis_authorized_nif=authorized_nif, storage_path="./edata_cli"
+        cups,
+        nif,
+        password,
+        datadis_authorized_nif=authorized_nif,
+        storage_path="./edata_cli",
     )
     await service.update_supplies()
     supply = await service.get_supply()
@@ -65,7 +69,7 @@ def download_all(
     asyncio.run(_download_all(nif, cups, authorized_nif))
 
 
-async def _update_bill(
+async def _update_custom_bill(
     cups: str,
     p1_kw_year_eur: float,
     p2_kw_year_eur: float,
@@ -89,7 +93,7 @@ async def _update_bill(
 
 
 @app.command()
-def update_bill(
+def update_custom_bill(
     cups: Annotated[str, typer.Option(help="The identifier of the Supply")],
     p1_kw_year_eur: Annotated[
         float, typer.Option(help="Price per kW at P1 tariff (by year)")
@@ -105,7 +109,7 @@ def update_bill(
     """Download all data for a given datadis account and CUPS."""
 
     asyncio.run(
-        _update_bill(
+        _update_custom_bill(
             cups,
             p1_kw_year_eur,
             p2_kw_year_eur,
@@ -113,6 +117,26 @@ def update_bill(
             p2_kwh_eur,
             p3_kwh_eur,
             meter_month_eur,
+        )
+    )
+
+
+async def _update_pvpc_bill(cups: str):
+    """Download all data for a given datadis account and CUPS."""
+
+    bs = BillService(cups, storage_path="./edata_cli")
+    await bs.update(is_pvpc=True)
+
+
+@app.command()
+def update_pvpc_bill(
+    cups: Annotated[str, typer.Option(help="The identifier of the Supply")],
+):
+    """Download all data for a given datadis account and CUPS."""
+
+    asyncio.run(
+        _update_pvpc_bill(
+            cups,
         )
     )
 

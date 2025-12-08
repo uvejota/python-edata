@@ -69,6 +69,7 @@ def redacted_cups(cups: str) -> str:
 
     return cups[-5:]
 
+
 def get_db_path(storage_dir: str) -> str:
     """Return the database path for a given root storage dir."""
 
