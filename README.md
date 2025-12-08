@@ -71,8 +71,8 @@ async def main():
         cups="ES0000000000000000XX",  # Tu CUPS
         datadis_user="12345678A",     # Tu NIF/usuario
         datadis_pwd="tu_password",
+        storage_path="./my_data"      # Directorio para la BD 
         datadis_authorized_nif=None,  # NIF autorizado (opcional)
-        storage_path="./my_data"      # Directorio para la BD (opcional)
     )
     
     # Actualizar todos los datos disponibles
