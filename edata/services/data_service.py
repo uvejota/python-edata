@@ -421,28 +421,19 @@ class DataService:
                     datetime=agg_dt,
                     delta_h=0,
                     value_kwh=0,
-                    value_p1_kwh=0,
-                    value_p2_kwh=0,
-                    value_p3_kwh=0,
+                    consumption_by_tariff=[0.0, 0.0, 0.0],
                     surplus_kwh=0,
-                    surplus_p1_kwh=0,
-                    surplus_p2_kwh=0,
-                    surplus_p3_kwh=0,
+                    surplus_by_tariff=[0.0, 0.0, 0.0],
                 )
 
             ref = agg_data[agg_dt]
             ref.delta_h += item.delta_h
-            ref.value_kwh += item.value_kwh
+            ref.consumption_kwh += item.consumption_kwh
             ref.surplus_kwh += item.surplus_kwh
-            if 1 == tariff:
-                ref.value_p1_kwh += item.value_kwh
-                ref.surplus_p1_kwh += item.surplus_kwh
-            elif 2 == tariff:
-                ref.value_p2_kwh += item.value_kwh
-                ref.surplus_p2_kwh += item.surplus_kwh
-            elif 3 == tariff:
-                ref.value_p3_kwh += item.value_kwh
-                ref.surplus_p3_kwh += item.surplus_kwh
+            if 1 <= tariff <= 3:
+                idx = tariff - 1
+                ref.consumption_by_tariff[idx] += item.consumption_kwh
+                ref.surplus_by_tariff[idx] += item.surplus_kwh
 
         return [agg_data[x] for x in agg_data]
 

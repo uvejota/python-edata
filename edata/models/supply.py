@@ -27,5 +27,15 @@ class Contract(BaseModel):
     date_end: datetime
     marketer: str
     distributor_code: str
-    power_p1: float | None
-    power_p2: float | None
+    power: list[float]
+
+    @property
+    def power_p1(self) -> float | None:
+        """Return power P1."""
+        return self.power[0] if len(self.power) > 0 else None
+
+    @property
+    def power_p2(self) -> float | None:
+        """Return power P2."""
+        return self.power[1] if len(self.power) > 1 else None
+

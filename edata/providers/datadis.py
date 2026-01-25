@@ -356,16 +356,7 @@ class DatadisConnector:
                         ),
                         marketer=i["marketer"],
                         distributor_code=distributor_code,
-                        power_p1=(
-                            i["contractedPowerkW"][0]
-                            if isinstance(i["contractedPowerkW"], list)
-                            else None
-                        ),
-                        power_p2=(
-                            i["contractedPowerkW"][1]
-                            if (len(i["contractedPowerkW"]) > 1)
-                            else None
-                        ),
+                        power=i["contractedPowerkW"],
                     )
                 )
             else:
@@ -424,7 +415,7 @@ class DatadisConnector:
                         Energy(
                             datetime=date_as_dt,
                             delta_h=1,
-                            value_kwh=i["consumptionKWh"],
+                            consumption_kwh=i["consumptionKWh"],
                             surplus_kwh=_surplus,
                             real=i["obtainMethod"] == "Real",
                         )
