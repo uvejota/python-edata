@@ -6,7 +6,7 @@ from pydantic import BaseModel
 
 
 class Supply(BaseModel):
-    """Represent a Supply."""
+    """Data model of a Supply."""
 
     cups: str
     date_start: datetime
@@ -16,16 +16,16 @@ class Supply(BaseModel):
     province: str | None
     municipality: str | None
     distributor: str | None
-    pointType: int
-    distributorCode: str
+    point_type: int
+    distributor_code: str
 
 
 class Contract(BaseModel):
-    """Represent a Contract."""
+    """Data model of a Contract."""
 
     date_start: datetime
     date_end: datetime
     marketer: str
-    distributorCode: str
+    distributor_code: str
     power_p1: float | None
     power_p2: float | None

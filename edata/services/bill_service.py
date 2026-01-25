@@ -306,8 +306,8 @@ class BillService:
             bill.energy_term = (
                 rules.electricity_tax
                 * rules.iva_tax
-                * p[dt].value_eur_kWh
-                * e[dt].value_kWh
+                * p[dt].value_eur_kwh
+                * e[dt].value_kwh
             )
             bill.power_term = (
                 rules.electricity_tax
@@ -358,7 +358,7 @@ class BillService:
             params = rules.model_dump()
             params["p1_kw"] = p1_kw
             params["p2_kw"] = p2_kw
-            params["kwh"] = e[dt].value_kWh
+            params["kwh"] = e[dt].value_kwh
 
             tariff = get_tariff(dt)
             if tariff == 1:

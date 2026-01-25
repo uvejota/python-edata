@@ -9,7 +9,7 @@ class EnergyPrice(BaseModel):
     """Represent pricing data."""
 
     datetime: datetime
-    value_eur_kWh: float
+    value_eur_kwh: float
     delta_h: float
 
 

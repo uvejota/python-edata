@@ -1,25 +1,25 @@
 # serializer version: 1
 # name: test_get_consumption_data
   list([
-    Energy(datetime=datetime.datetime(2022, 10, 22, 0, 0), delta_h=1.0, value_kWh=0.203, surplus_kWh=0.0, real=True),
-    Energy(datetime=datetime.datetime(2022, 10, 22, 1, 0), delta_h=1.0, value_kWh=0.163, surplus_kWh=0.0, real=True),
+    Energy(datetime=datetime.datetime(2022, 10, 22, 0, 0), delta_h=1.0, value_kwh=0.203, surplus_kwh=0.0, real=True),
+    Energy(datetime=datetime.datetime(2022, 10, 22, 1, 0), delta_h=1.0, value_kwh=0.163, surplus_kwh=0.0, real=True),
   ])
 # ---
 # name: test_get_consumption_data_cache
   list([
-    Energy(datetime=datetime.datetime(2022, 10, 22, 0, 0), delta_h=1.0, value_kWh=0.203, surplus_kWh=0.0, real=True),
-    Energy(datetime=datetime.datetime(2022, 10, 22, 1, 0), delta_h=1.0, value_kWh=0.163, surplus_kWh=0.0, real=True),
+    Energy(datetime=datetime.datetime(2022, 10, 22, 0, 0), delta_h=1.0, value_kwh=0.203, surplus_kwh=0.0, real=True),
+    Energy(datetime=datetime.datetime(2022, 10, 22, 1, 0), delta_h=1.0, value_kwh=0.163, surplus_kwh=0.0, real=True),
   ])
 # ---
 # name: test_get_consumption_data_cache.1
   list([
-    Energy(datetime=datetime.datetime(2022, 10, 22, 0, 0), delta_h=1.0, value_kWh=0.203, surplus_kWh=0.0, real=True),
-    Energy(datetime=datetime.datetime(2022, 10, 22, 1, 0), delta_h=1.0, value_kWh=0.163, surplus_kWh=0.0, real=True),
+    Energy(datetime=datetime.datetime(2022, 10, 22, 0, 0), delta_h=1.0, value_kwh=0.203, surplus_kwh=0.0, real=True),
+    Energy(datetime=datetime.datetime(2022, 10, 22, 1, 0), delta_h=1.0, value_kwh=0.163, surplus_kwh=0.0, real=True),
   ])
 # ---
 # name: test_get_contract_detail
   list([
-    Contract(date_start=datetime.datetime(2022, 3, 9, 0, 0), date_end=datetime.datetime(2022, 10, 28, 0, 0), marketer='MARKETER', distributorCode='2', power_p1=4.4, power_p2=4.4),
+    Contract(date_start=datetime.datetime(2022, 3, 9, 0, 0), date_end=datetime.datetime(2022, 10, 28, 0, 0), marketer='MARKETER', distributor_code='2', power_p1=4.4, power_p2=4.4),
   ])
 # ---
 # name: test_get_max_power
@@ -31,7 +31,7 @@
 # ---
 # name: test_get_supplies
   list([
-    Supply(cups='ESXXXXXXXXXXXXXXXXTEST', date_start=datetime.datetime(2022, 3, 9, 0, 0), date_end=datetime.datetime(2022, 10, 28, 0, 0), address='-', postal_code='-', province='-', municipality='-', distributor='-', pointType=5, distributorCode='2'),
+    Supply(cups='ESXXXXXXXXXXXXXXXXTEST', date_start=datetime.datetime(2022, 3, 9, 0, 0), date_end=datetime.datetime(2022, 10, 28, 0, 0), address='-', postal_code='-', province='-', municipality='-', distributor='-', point_type=5, distributor_code='2'),
   ])
 # ---
 # name: test_get_supplies_empty_response
@@ -44,11 +44,11 @@
 # ---
 # name: test_get_supplies_optional_fields_none
   list([
-    Supply(cups='ESXXXXXXXXXXXXXXXXTEST', date_start=datetime.datetime(2022, 3, 9, 0, 0), date_end=datetime.datetime(2022, 10, 28, 0, 0), address=None, postal_code=None, province=None, municipality=None, distributor=None, pointType=5, distributorCode='2'),
+    Supply(cups='ESXXXXXXXXXXXXXXXXTEST', date_start=datetime.datetime(2022, 3, 9, 0, 0), date_end=datetime.datetime(2022, 10, 28, 0, 0), address=None, postal_code=None, province=None, municipality=None, distributor=None, point_type=5, distributor_code='2'),
   ])
 # ---
 # name: test_get_supplies_partial_response
   list([
-    Supply(cups='ESXXXXXXXXXXXXXXXXTEST', date_start=datetime.datetime(2022, 3, 9, 0, 0), date_end=datetime.datetime(2022, 10, 28, 0, 0), address='-', postal_code='-', province='-', municipality='-', distributor='-', pointType=5, distributorCode='2'),
+    Supply(cups='ESXXXXXXXXXXXXXXXXTEST', date_start=datetime.datetime(2022, 3, 9, 0, 0), date_end=datetime.datetime(2022, 10, 28, 0, 0), address='-', postal_code='-', province='-', municipality='-', distributor='-', point_type=5, distributor_code='2'),
   ])
 # ---

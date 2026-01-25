@@ -62,7 +62,7 @@ class REDataConnector:
                                     datetime=parser.parse(element["datetime"]).replace(
                                         tzinfo=None
                                     ),
-                                    value_eur_kWh=element["value"] / 1000,
+                                    value_eur_kwh=element["value"] / 1000,
                                     delta_h=1,
                                 )
                             )

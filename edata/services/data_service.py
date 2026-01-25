@@ -255,7 +255,7 @@ class DataService:
         supply = self._find_supply_for_cups(cups)
         if supply:
             self._contracts = await self.datadis.async_get_contract_detail(
-                cups, supply.distributorCode, self._authorized_nif
+                cups, supply.distributor_code, self._authorized_nif
             )
             for c in self._contracts:
                 await self.db.add_contract(self._cups, c)
@@ -271,11 +271,11 @@ class DataService:
         if supply:
             data = await self.datadis.async_get_consumption_data(
                 cups,
-                supply.distributorCode,
+                supply.distributor_code,
                 start,
                 end,
                 self._measurement_type,
-                supply.pointType,
+                supply.point_type,
                 self._authorized_nif,
             )
             await self.db.add_energy_list(self._cups, data)
@@ -290,7 +290,7 @@ class DataService:
         if supply:
             data = await self.datadis.async_get_max_power(
                 cups,
-                supply.distributorCode,
+                supply.distributor_code,
                 start,
                 end,
                 self._authorized_nif,
@@ -420,29 +420,29 @@ class DataService:
                 agg_data[agg_dt] = Statistics(
                     datetime=agg_dt,
                     delta_h=0,
-                    value_kWh=0,
-                    value_p1_kWh=0,
-                    value_p2_kWh=0,
-                    value_p3_kWh=0,
-                    surplus_kWh=0,
-                    surplus_p1_kWh=0,
-                    surplus_p2_kWh=0,
-                    surplus_p3_kWh=0,
+                    value_kwh=0,
+                    value_p1_kwh=0,
+                    value_p2_kwh=0,
+                    value_p3_kwh=0,
+                    surplus_kwh=0,
+                    surplus_p1_kwh=0,
+                    surplus_p2_kwh=0,
+                    surplus_p3_kwh=0,
                 )
 
             ref = agg_data[agg_dt]
             ref.delta_h += item.delta_h
-            ref.value_kWh += item.value_kWh
-            ref.surplus_kWh += item.surplus_kWh
+            ref.value_kwh += item.value_kwh
+            ref.surplus_kwh += item.surplus_kwh
             if 1 == tariff:
-                ref.value_p1_kWh += item.value_kWh
-                ref.surplus_p1_kWh += item.surplus_kWh
+                ref.value_p1_kwh += item.value_kwh
+                ref.surplus_p1_kwh += item.surplus_kwh
             elif 2 == tariff:
-                ref.value_p2_kWh += item.value_kWh
-                ref.surplus_p2_kWh += item.surplus_kWh
+                ref.value_p2_kwh += item.value_kwh
+                ref.surplus_p2_kwh += item.surplus_kwh
             elif 3 == tariff:
-                ref.value_p3_kWh += item.value_kWh
-                ref.surplus_p3_kWh += item.surplus_kWh
+                ref.value_p3_kwh += item.value_kwh
+                ref.surplus_p3_kwh += item.surplus_kwh
 
         return [agg_data[x] for x in agg_data]
 

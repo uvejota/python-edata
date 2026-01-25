@@ -8,7 +8,7 @@
         "province": "-",
         "municipality": "-",
         "distributor": "-",
-        "pointType": 5,
-        "distributorCode": "2"
+        "point_type": 5,
+        "distributor_code": "2"
     }
 ]

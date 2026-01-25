@@ -316,8 +316,8 @@ class DatadisConnector:
                         province=i.get("province", None),
                         municipality=i.get("municipality", None),
                         distributor=i.get("distributor", None),
-                        pointType=i["pointType"],
-                        distributorCode=i["distributorCode"],
+                        point_type=i["pointType"],
+                        distributor_code=i["distributorCode"],
                     )
                 )
             else:
@@ -355,7 +355,7 @@ class DatadisConnector:
                             "%Y/%m/%d",
                         ),
                         marketer=i["marketer"],
-                        distributorCode=distributor_code,
+                        distributor_code=distributor_code,
                         power_p1=(
                             i["contractedPowerkW"][0]
                             if isinstance(i["contractedPowerkW"], list)
@@ -424,8 +424,8 @@ class DatadisConnector:
                         Energy(
                             datetime=date_as_dt,
                             delta_h=1,
-                            value_kWh=i["consumptionKWh"],
-                            surplus_kWh=_surplus,
+                            value_kwh=i["consumptionKWh"],
+                            surplus_kwh=_surplus,
                             real=i["obtainMethod"] == "Real",
                         )
                     )

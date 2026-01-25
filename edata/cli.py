@@ -28,7 +28,7 @@ def show_supplies(username: str) -> None:
         typer.echo(supply.model_dump_json())
     if supplies:
         cups = supplies[0].cups
-        distributor = supplies[0].distributorCode
+        distributor = supplies[0].distributor_code
         contracts = connector.get_contract_detail(cups, distributor)
         typer.echo("\nContracts:")
         for contract in contracts:
