@@ -1,20 +1,20 @@
 # serializer version: 1
 # name: test_get_consumption_data
   list([
-    Energy(datetime=datetime.datetime(2022, 10, 22, 0, 0), delta_h=1.0, consumption_kwh=0.203, surplus_kwh=0.0, real=True),
-    Energy(datetime=datetime.datetime(2022, 10, 22, 1, 0), delta_h=1.0, consumption_kwh=0.163, surplus_kwh=0.0, real=True),
+    Energy(datetime=datetime.datetime(2022, 10, 22, 0, 0), delta_h=1.0, consumption_kwh=0.203, surplus_kwh=0.0, generation_kwh=0.0, selfconsumption_kwh=0.0, real=True),
+    Energy(datetime=datetime.datetime(2022, 10, 22, 1, 0), delta_h=1.0, consumption_kwh=0.163, surplus_kwh=0.0, generation_kwh=0.0, selfconsumption_kwh=0.0, real=True),
   ])
 # ---
 # name: test_get_consumption_data_cache
   list([
-    Energy(datetime=datetime.datetime(2022, 10, 22, 0, 0), delta_h=1.0, consumption_kwh=0.203, surplus_kwh=0.0, real=True),
-    Energy(datetime=datetime.datetime(2022, 10, 22, 1, 0), delta_h=1.0, consumption_kwh=0.163, surplus_kwh=0.0, real=True),
+    Energy(datetime=datetime.datetime(2022, 10, 22, 0, 0), delta_h=1.0, consumption_kwh=0.203, surplus_kwh=0.0, generation_kwh=0.0, selfconsumption_kwh=0.0, real=True),
+    Energy(datetime=datetime.datetime(2022, 10, 22, 1, 0), delta_h=1.0, consumption_kwh=0.163, surplus_kwh=0.0, generation_kwh=0.0, selfconsumption_kwh=0.0, real=True),
   ])
 # ---
 # name: test_get_consumption_data_cache.1
   list([
-    Energy(datetime=datetime.datetime(2022, 10, 22, 0, 0), delta_h=1.0, consumption_kwh=0.203, surplus_kwh=0.0, real=True),
-    Energy(datetime=datetime.datetime(2022, 10, 22, 1, 0), delta_h=1.0, consumption_kwh=0.163, surplus_kwh=0.0, real=True),
+    Energy(datetime=datetime.datetime(2022, 10, 22, 0, 0), delta_h=1.0, consumption_kwh=0.203, surplus_kwh=0.0, generation_kwh=0.0, selfconsumption_kwh=0.0, real=True),
+    Energy(datetime=datetime.datetime(2022, 10, 22, 1, 0), delta_h=1.0, consumption_kwh=0.163, surplus_kwh=0.0, generation_kwh=0.0, selfconsumption_kwh=0.0, real=True),
   ])
 # ---
 # name: test_get_contract_detail

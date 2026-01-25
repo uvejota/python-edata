@@ -424,16 +424,24 @@ class DataService:
                     consumption_by_tariff=[0.0, 0.0, 0.0],
                     surplus_kwh=0,
                     surplus_by_tariff=[0.0, 0.0, 0.0],
+                    generation_kwh=0,
+                    generation_by_tariff=[0.0, 0.0, 0.0],
+                    selfconsumption_kwh=0,
+                    selfconsumption_by_tariff=[0.0, 0.0, 0.0],
                 )
 
             ref = agg_data[agg_dt]
             ref.delta_h += item.delta_h
             ref.consumption_kwh += item.consumption_kwh
             ref.surplus_kwh += item.surplus_kwh
+            ref.generation_kwh += item.generation_kwh
+            ref.selfconsumption_kwh += item.selfconsumption_kwh
             if 1 <= tariff <= 3:
                 idx = tariff - 1
                 ref.consumption_by_tariff[idx] += item.consumption_kwh
                 ref.surplus_by_tariff[idx] += item.surplus_kwh
+                ref.generation_by_tariff[idx] += item.generation_kwh
+                ref.selfconsumption_by_tariff[idx] += item.selfconsumption_kwh
 
         return [agg_data[x] for x in agg_data]
 
