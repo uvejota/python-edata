@@ -119,7 +119,7 @@ async def main():
     # Mostrar resumen
     total_cost = sum(b.value_eur for b in bills)
     print(f"Coste total: {total_cost:.2f} €")
-    print(f"Consumo total: {sum(e.value_kWh for e in energy):.2f} kWh")
+    print(f"Consumo total: {sum(e.value_kwh for e in energy):.2f} kWh")
 
 # Ejecutar
 asyncio.run(main())
@@ -137,7 +137,7 @@ python -m edata.cli show-supplies <username>
 python -m edata.cli download-all --cups ES0000000000000000XX <username>
 
 # Actualizar facturación con tarifa fija
-python -m edata.cli update-bill \
+python -m edata.cli update-custom-bill \
   --cups ES0000000000000000XX \
   --p1-kw-year-eur 30.67 \
   --p2-kw-year-eur 1.42 \

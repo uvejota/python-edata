@@ -21,7 +21,7 @@ class Power(BaseModel):
     """Represent power measurements."""
 
     datetime: datetime
-    value_kW: float
+    value_kw: float
 
 
 class Statistics(BaseModel):

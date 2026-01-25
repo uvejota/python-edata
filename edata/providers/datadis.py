@@ -474,7 +474,7 @@ class DatadisConnector:
                         datetime=datetime.strptime(
                             f"{i['date']} {i['time']}", "%Y/%m/%d %H:%M"
                         ),
-                        value_kW=i["maxPower"],
+                        value_kw=i["maxPower"],
                     )
                 )
             else:
