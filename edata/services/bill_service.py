@@ -115,12 +115,12 @@ class BillService:
             pvpc = await self._get_pvpc()
             billing_rules = PVPCBillingRules(**billing_rules.model_dump())
             bills = await asyncio.to_thread(
-                self._compile_pvpc, contracts, energy, pvpc, billing_rules
+                self.simulate_pvpc, contracts, energy, pvpc, billing_rules
             )
             confighash = f"pvpc-{hash(billing_rules.model_dump_json())}"
         else:
             bills = await asyncio.to_thread(
-                self._compile_j2, contracts, energy, billing_rules
+                self.simulate_custom, contracts, energy, billing_rules
             )
             confighash = f"custom-{hash(billing_rules.model_dump_json())}"
 
@@ -264,7 +264,7 @@ class BillService:
             end = month + relativedelta.relativedelta(months=1) - timedelta(minutes=1)
             await self._update_monthly_statistics(month, end)
 
-    def _compile_pvpc(
+    def simulate_pvpc(
         self,
         contracts: list[Contract],
         energy: list[Energy],
@@ -326,7 +326,7 @@ class BillService:
 
         return [x for x in b.values()]
 
-    def _compile_j2(
+    def simulate_custom(
         self,
         contracts: list[Contract],
         energy: list[Energy],
@@ -388,25 +388,26 @@ class BillService:
         return [x for x in b.values()]
 
     async def _get_contracts(self) -> list[Contract]:
-
+        """Get contracts."""
         res = await self.db.list_contracts(self._cups)
         return [x.data for x in res]
 
     async def _get_energy(
         self, start: datetime | None = None, end: datetime | None = None
     ) -> list[Energy]:
+        """Get energy."""
         res = await self.db.list_energy(self._cups, start, end)
         return [x.data for x in res]
 
     async def _get_pvpc(
         self, start: datetime | None = None, end: datetime | None = None
     ) -> list[EnergyPrice]:
+        """Get PVPC."""
         res = await self.db.list_pvpc(start, end)
         return [x.data for x in res]
 
     async def _get_last_bill_dt(self) -> datetime | None:
         """Return the timestamp of the latest bill record."""
-
         last_record = await self.db.get_last_bill(self._cups)
         if last_record:
             return last_record.datetime
