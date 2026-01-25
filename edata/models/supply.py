@@ -6,7 +6,7 @@ from pydantic import BaseModel
 
 
 class Supply(BaseModel):
-    """Data model of a Supply."""
+    """Represent a Supply."""
 
     cups: str
     date_start: datetime
@@ -21,7 +21,7 @@ class Supply(BaseModel):
 
 
 class Contract(BaseModel):
-    """Data model of a Contract."""
+    """Represent a Contract."""
 
     date_start: datetime
     date_end: datetime

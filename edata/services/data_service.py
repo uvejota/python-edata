@@ -109,7 +109,7 @@ class DataService:
         data = await self.db.list_statistics(self._cups, type_, start, end, complete)
         return [x.data for x in data]
 
-    async def fix_missing_statistics(self):
+    async def fix_missing_statistics(self) -> None:
         """Recompile statistics to fix missing data."""
 
         missing = await self._find_missing_stats()
@@ -236,12 +236,12 @@ class DataService:
 
         return True
 
-    async def login(self):
+    async def login(self) -> bool:
         """Test login at Datadis."""
 
         return await self.datadis.async_login()
 
-    async def update_supplies(self):
+    async def update_supplies(self) -> None:
         """Update the list of supplies for the configured user."""
 
         self._supplies = await self.datadis.async_get_supplies(self._authorized_nif)
@@ -263,7 +263,7 @@ class DataService:
         _LOGGER.warning("Unable to fetch contract details for %s", self._scups)
         return False
 
-    async def update_energy(self, start: datetime, end: datetime):
+    async def update_energy(self, start: datetime, end: datetime) -> bool:
         """Update the list of energy consumptions for the selected cups."""
 
         cups = self._cups
@@ -283,7 +283,7 @@ class DataService:
         _LOGGER.warning("Unable to fetch energy data for %s", self._scups)
         return False
 
-    async def update_power(self, start: datetime, end: datetime):
+    async def update_power(self, start: datetime, end: datetime) -> bool:
         """Update the list of power peaks for the selected cups."""
         cups = self._cups
         supply = self._find_supply_for_cups(cups)
@@ -300,7 +300,7 @@ class DataService:
         _LOGGER.warning("Unable to fetch power data for %s", self._scups)
         return False
 
-    async def update_pvpc(self, start: datetime, end: datetime):
+    async def update_pvpc(self, start: datetime, end: datetime) -> bool:
         """Update recent pvpc prices."""
 
         cups = self._cups
@@ -324,13 +324,13 @@ class DataService:
         _LOGGER.warning("%s unable to fetch pvpc prices", self._scups)
         return False
 
-    async def update_statistics(self, start: datetime, end: datetime):
+    async def update_statistics(self, start: datetime, end: datetime) -> None:
         """Update the statistics during a period."""
 
         await self._update_daily_statistics(start, end)
         await self._update_monthly_statistics(start, end)
 
-    async def _update_daily_statistics(self, start: datetime, end: datetime):
+    async def _update_daily_statistics(self, start: datetime, end: datetime) -> None:
         """Update daily statistics within a date range."""
 
         day_start = get_day(start)
@@ -358,7 +358,7 @@ class DataService:
                     stat.datetime.date(),
                 )
 
-    async def _update_monthly_statistics(self, start: datetime, end: datetime):
+    async def _update_monthly_statistics(self, start: datetime, end: datetime) -> None:
         """Update monthly statistics within a date range."""
 
         month_start = get_month(start)
@@ -446,7 +446,7 @@ class DataService:
 
         return [agg_data[x] for x in agg_data]
 
-    async def _find_missing_stats(self, agg: typing.Literal["day", "month"] = "day"):
+    async def _find_missing_stats(self, agg: typing.Literal["day", "month"] = "day") -> list[datetime]:
         """Return the list of days that are missing energy data."""
 
         stats = await self.get_statistics(agg, complete=False)
@@ -473,7 +473,7 @@ class DataService:
         if last_record:
             return last_record.datetime
 
-    async def _sync(self):
+    async def _sync(self) -> None:
         """Load state."""
 
         self._supplies = await self.get_supplies()

@@ -7,10 +7,7 @@ T = TypeVar("T", bound=BaseModel)
 
 
 class PydanticJSON(TypeDecorator):
-    """
-    Tipo de SQLAlchemy para guardar modelos Pydantic como JSON.
-    Automáticamente serializa al guardar y deserializa al leer.
-    """
+    """SQLAlchemy type to guard Pydantic models as JSON."""
 
     impl = JSON
     cache_ok = True
@@ -20,6 +17,7 @@ class PydanticJSON(TypeDecorator):
         self.pydantic_model = pydantic_model
 
     def process_bind_param(self, value: T | None, dialect: Any) -> Any:
+        """Process binding parameter."""
         # Python -> Base de Datos
         if value is None:
             return None
@@ -27,6 +25,7 @@ class PydanticJSON(TypeDecorator):
         return value.model_dump(mode="json")
 
     def process_result_value(self, value: Any, dialect: Any) -> T | None:
+        """Process result value."""
         # Base de Datos -> Python
         if value is None:
             return None

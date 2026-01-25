@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 
 
 class EnergyPrice(BaseModel):
-    """Data structure to represent pricing data."""
+    """Represent pricing data."""
 
     datetime: datetime
     value_eur_kWh: float
@@ -14,7 +14,7 @@ class EnergyPrice(BaseModel):
 
 
 class Bill(BaseModel):
-    """Data structure to represent a bill during a period."""
+    """Represent a bill during a period."""
 
     datetime: datetime
     delta_h: float
@@ -26,7 +26,7 @@ class Bill(BaseModel):
 
 
 class BillingRules(BaseModel):
-    """Data structure to represent a generic billing rule."""
+    """Represent a generic billing rule."""
 
     p1_kw_year_eur: float
     p2_kw_year_eur: float
@@ -50,7 +50,7 @@ class BillingRules(BaseModel):
 
 
 class PVPCBillingRules(BillingRules):
-    """Data structure to represent a PVPC billing rule."""
+    """Represent a PVPC billing rule."""
 
     p1_kw_year_eur: float = Field(default=30.67266)
     p2_kw_year_eur: float = Field(default=1.4243591)

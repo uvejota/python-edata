@@ -79,7 +79,7 @@ class REDataConnector:
 
     def get_realtime_prices(
         self, dt_from: dt.datetime, dt_to: dt.datetime, is_ceuta_melilla: bool = False
-    ) -> list:
+    ) -> list[EnergyPrice]:
         """GET query to fetch realtime pvpc prices, historical data is limited to current month (sync wrapper)"""
         return asyncio.run(
             self.async_get_realtime_prices(dt_from, dt_to, is_ceuta_melilla)

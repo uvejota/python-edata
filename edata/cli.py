@@ -17,7 +17,7 @@ app = typer.Typer()
 
 
 @app.command()
-def show_supplies(username: str):
+def show_supplies(username: str) -> None:
     """Show supplies and contracts for a given datadis user."""
 
     password = getpass()
@@ -41,7 +41,7 @@ async def _download_all(
     nif: str,
     cups: str,
     authorized_nif: str | None = None,
-):
+) -> None:
     """Download all data for a given datadis account and CUPS."""
 
     password = getpass()
@@ -63,7 +63,7 @@ def download_all(
     nif: str,
     cups: Annotated[str, typer.Option(help="The identifier of the Supply")],
     authorized_nif: str | None = None,
-):
+) -> None:
     """Download all data for a given datadis account and CUPS."""
 
     asyncio.run(_download_all(nif, cups, authorized_nif))
@@ -77,7 +77,7 @@ async def _update_custom_bill(
     p2_kwh_eur: float,
     p3_kwh_eur: float,
     meter_month_eur: float,
-):
+) -> None:
     """Download all data for a given datadis account and CUPS."""
 
     bs = BillService(cups, storage_path="./edata_cli")
@@ -105,7 +105,7 @@ def update_custom_bill(
     p2_kwh_eur: Annotated[float, typer.Option(help="Price per kWh at P2 tariff")],
     p3_kwh_eur: Annotated[float, typer.Option(help="Price per kWh at P3 tariff")],
     meter_month_eur: Annotated[float, typer.Option(help="Monthly cost of the meter")],
-):
+) -> None:
     """Download all data for a given datadis account and CUPS."""
 
     asyncio.run(
@@ -121,7 +121,7 @@ def update_custom_bill(
     )
 
 
-async def _update_pvpc_bill(cups: str):
+async def _update_pvpc_bill(cups: str) -> None:
     """Download all data for a given datadis account and CUPS."""
 
     bs = BillService(cups, storage_path="./edata_cli")
@@ -131,7 +131,7 @@ async def _update_pvpc_bill(cups: str):
 @app.command()
 def update_pvpc_bill(
     cups: Annotated[str, typer.Option(help="The identifier of the Supply")],
-):
+) -> None:
     """Download all data for a given datadis account and CUPS."""
 
     asyncio.run(

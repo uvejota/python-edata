@@ -43,7 +43,7 @@ def get_tariff(dt: datetime) -> int:
     return 0
 
 
-def get_contract_for_dt(contracts: list[Contract], date: datetime):
+def get_contract_for_dt(contracts: list[Contract], date: datetime) -> Contract | None:
     """Return the active contract for a provided datetime."""
 
     for contract in contracts:

@@ -1,10 +1,4 @@
-"""Datadis API connector.
-
-To fetch data from datadis.es private API.
-There a few issues that are workarounded:
- - You have to wait 24h between two identical requests.
- - Datadis server does not like ranges greater than 1 month.
-"""
+"""Datadis API connector."""
 
 import asyncio
 import contextlib
@@ -68,7 +62,7 @@ QUERY_LIMIT = timedelta(hours=24)  # a datadis limitation, again...
 RECENT_CACHE_SUBDIR = "cache"
 
 
-def migrate_storage(storage_dir):
+def migrate_storage(storage_dir: str) -> None:
     """Migrate storage from older versions."""
     with contextlib.suppress(FileNotFoundError):
         os.remove(os.path.join(storage_dir, "edata_recent_queries.json"))
@@ -102,7 +96,7 @@ class DatadisConnector:
         os.makedirs(self._recent_cache_dir, exist_ok=True)
         self._cache = diskcache.Cache(self._recent_cache_dir)
 
-    def _get_hash(self, item: str):
+    def _get_hash(self, item: str) -> str:
         """Return a hash."""
 
         return hashlib.md5(item.encode()).hexdigest()
@@ -121,7 +115,7 @@ class DatadisConnector:
         hash_query = self._get_hash(key)
         return hash_query in self._cache
 
-    def _get_cache(self, key: str):
+    def _get_cache(self, key: str) -> dict | None:
         """Return cached response for a query (diskcache)."""
         hash_query = self._get_hash(key)
         try:
@@ -129,7 +123,7 @@ class DatadisConnector:
         except Exception:
             return None
 
-    async def _async_get_token(self):
+    async def _async_get_token(self) -> bool:
         """Private async method that fetches a new token if needed."""
         _LOGGER.debug("No token found, fetching a new one")
         is_valid_token = False
@@ -158,11 +152,11 @@ class DatadisConnector:
                 _LOGGER.error("Exception while retrieving token: %s", e)
         return is_valid_token
 
-    async def async_login(self):
+    async def async_login(self) -> bool:
         """Test to login with provided credentials (async)."""
         return await self._async_get_token()
 
-    def login(self):
+    def login(self) -> bool:
         """Test to login with provided credentials (sync wrapper)."""
         return asyncio.run(self.async_login())
 
@@ -333,7 +327,7 @@ class DatadisConnector:
                 )
         return supplies
 
-    def get_supplies(self, authorized_nif: str | None = None):
+    def get_supplies(self, authorized_nif: str | None = None) -> list[Supply]:
         """Datadis 'get_supplies' query (sync wrapper)."""
         return asyncio.run(self.async_get_supplies(authorized_nif=authorized_nif))
 
@@ -383,7 +377,7 @@ class DatadisConnector:
 
     def get_contract_detail(
         self, cups: str, distributor_code: str, authorized_nif: str | None = None
-    ):
+    ) -> list[Contract]:
         """Datadis get_contract_detail query (sync wrapper)."""
         return asyncio.run(
             self.async_get_contract_detail(cups, distributor_code, authorized_nif)
@@ -451,7 +445,7 @@ class DatadisConnector:
         measurement_type: str,
         point_type: int,
         authorized_nif: str | None = None,
-    ):
+    ) -> list[Energy]:
         """Datadis get_consumption_data query (sync wrapper)."""
         return asyncio.run(
             self.async_get_consumption_data(
@@ -507,7 +501,7 @@ class DatadisConnector:
         start_date: datetime,
         end_date: datetime,
         authorized_nif: str | None = None,
-    ):
+    ) -> list[Power]:
         """Datadis get_max_power query (sync wrapper)."""
         return asyncio.run(
             self.async_get_max_power(

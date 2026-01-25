@@ -49,12 +49,12 @@ class EdataDB:
         return cls._instance
 
     @property
-    def engine(self):
+    def engine(self) -> AsyncEngine | None:
         """Return the async database engine."""
 
         return self._engine
 
-    async def _ensure_tables(self):
+    async def _ensure_tables(self) -> None:
         """Create tables if not already created (lazy init)."""
 
         if self._tables_initialized:
@@ -84,11 +84,11 @@ class EdataDB:
         self,
         session: AsyncSession,
         query: SelectOfScalar,
-        data,
+        data: typing.Any,
         commit: bool = True,
         overrides: dict[str, typing.Any] | None = None,
     ) -> T | None:  # type: ignore
-        """Updates a single record in the database."""
+        """Update a single record in the database."""
 
         result = await session.exec(query)
         existing = result.first()
@@ -240,7 +240,7 @@ class EdataDB:
                 session, q.get_energy(cups, energy.datetime), record
             )
 
-    async def add_energy_list(self, cups: str, energy: list[Energy]):
+    async def add_energy_list(self, cups: str, energy: list[Energy]) -> None:
         """Add or update a list of energy records."""
 
         await self._ensure_tables()
@@ -264,7 +264,7 @@ class EdataDB:
                 session, q.get_power(cups, power.datetime), record
             )
 
-    async def add_power_list(self, cups: str, power: list[Power]):
+    async def add_power_list(self, cups: str, power: list[Power]) -> None:
         """Add or update a list of power records."""
 
         await self._ensure_tables()
@@ -285,7 +285,7 @@ class EdataDB:
                 session, q.get_pvpc(pvpc.datetime), record
             )
 
-    async def add_pvpc_list(self, pvpc: list[EnergyPrice]):
+    async def add_pvpc_list(self, pvpc: list[EnergyPrice]) -> None:
         """Add or update a list of pvpc records."""
 
         await self._ensure_tables()
@@ -351,7 +351,7 @@ class EdataDB:
         confhash: str,
         complete: bool,
         bill: list[Bill],
-    ):
+    ) -> None:
         """Add or update a list of bill records."""
 
         await self._ensure_tables()
@@ -374,7 +374,7 @@ class EdataDB:
                 session, queries, items, override=["complete", "confhash"]
             )
 
-    async def list_supplies(self):
+    async def list_supplies(self) -> typing.Sequence[SupplyModel]:
         """List all supply records."""
 
         await self._ensure_tables()
@@ -382,7 +382,7 @@ class EdataDB:
             result = await session.exec(q.list_supply())
             return result.all()
 
-    async def list_contracts(self, cups: str | None = None):
+    async def list_contracts(self, cups: str | None = None) -> typing.Sequence[ContractModel]:
         """List all contract records."""
 
         await self._ensure_tables()
@@ -395,7 +395,7 @@ class EdataDB:
         cups: str,
         date_from: datetime | None = None,
         date_to: datetime | None = None,
-    ):
+    ) -> typing.Sequence[EnergyModel]:
         """List energy records."""
 
         await self._ensure_tables()
@@ -408,7 +408,7 @@ class EdataDB:
         cups: str,
         date_from: datetime | None = None,
         date_to: datetime | None = None,
-    ):
+    ) -> typing.Sequence[PowerModel]:
         """List power records."""
 
         await self._ensure_tables()
@@ -420,7 +420,7 @@ class EdataDB:
         self,
         date_from: datetime | None = None,
         date_to: datetime | None = None,
-    ):
+    ) -> typing.Sequence[PVPCModel]:
         """List pvpc records."""
 
         await self._ensure_tables()
@@ -435,7 +435,7 @@ class EdataDB:
         date_from: datetime | None = None,
         date_to: datetime | None = None,
         complete: bool | None = None,
-    ):
+    ) -> typing.Sequence[StatisticsModel]:
         """List statistics records filtered by type ('day' or 'month') and date range."""
 
         await self._ensure_tables()
@@ -452,7 +452,7 @@ class EdataDB:
         date_from: datetime | None = None,
         date_to: datetime | None = None,
         complete: bool | None = None,
-    ):
+    ) -> typing.Sequence[BillModel]:
         """List bill records filtered by type ('hour', 'day' or 'month') and date range."""
 
         await self._ensure_tables()

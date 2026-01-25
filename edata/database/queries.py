@@ -215,7 +215,9 @@ def list_pvpc(
     return query
 
 
-def get_bill(cups, type_, datetime_):
+def get_bill(
+    cups: str, type_: typing.Literal["hour", "day", "month"], datetime_: datetime | None
+) -> SelectOfScalar[BillModel]:
     """Query that selects a bill."""
 
     query = select(BillModel).where(BillModel.cups == cups)

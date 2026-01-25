@@ -143,7 +143,7 @@ class BillService:
         await self._update_daily_statistics(start, end)
         await self._update_monthly_statistics(start, end)
 
-    async def _update_daily_statistics(self, start: datetime, end: datetime):
+    async def _update_daily_statistics(self, start: datetime, end: datetime) -> None:
         """Update daily statistics within a date range."""
 
         day_start = get_day(start)
@@ -171,7 +171,7 @@ class BillService:
                     stat.datetime.date(),
                 )
 
-    async def _update_monthly_statistics(self, start: datetime, end: datetime):
+    async def _update_monthly_statistics(self, start: datetime, end: datetime) -> None:
         """Update monthly statistics within a date range."""
 
         month_start = get_month(start)
@@ -202,7 +202,7 @@ class BillService:
                     stat.datetime.date(),
                 )
 
-    async def _find_missing_stats(self):
+    async def _find_missing_stats(self) -> list[datetime]:
         """Return the list of days that are missing billing data."""
 
         stats = await self.db.list_bill(self._cups, "day", complete=False)
@@ -247,7 +247,7 @@ class BillService:
 
         return [agg_data[x] for x in agg_data]
 
-    async def fix_missing_statistics(self):
+    async def fix_missing_statistics(self) -> None:
         """Recompile statistics to fix missing data."""
 
         missing = await self._find_missing_stats()
@@ -331,7 +331,7 @@ class BillService:
         contracts: list[Contract],
         energy: list[Energy],
         rules: BillingRules,
-    ):
+    ) -> list[Bill]:
         """Compile bills from custom rules."""
 
         e = {x.datetime: x for x in energy}
