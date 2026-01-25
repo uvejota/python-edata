@@ -166,7 +166,7 @@ class DatadisConnector:
         refresh_token: bool = False,
         is_retry: bool = False,
         ignore_cache: bool = False,
-    ) -> list[dict[str, typing.Any]]:
+    ) -> dict[str, typing.Any]:
         """Async get request for Datadis API."""
 
         if request_data is None:
@@ -175,7 +175,7 @@ class DatadisConnector:
             data = request_data
 
         is_valid_token = False
-        response = []
+        response = {}
         if refresh_token:
             is_valid_token = await self._async_get_token()
         if is_valid_token or not refresh_token:
@@ -201,7 +201,7 @@ class DatadisConnector:
                 if _cache is not None:
                     _LOGGER.info("CACHED %s", url + anonym_params)
                     return _cache  # type: ignore
-                return []
+                return {}
 
             try:
                 _LOGGER.info("GET %s", url + anonym_params)
@@ -272,10 +272,10 @@ class DatadisConnector:
                             )
             except asyncio.TimeoutError:
                 _LOGGER.warning("Timeout at %s", url + anonym_params)
-                return []
+                return {}
             except Exception as e:
                 _LOGGER.warning("Exception at %s: %s", url + anonym_params, e)
-                return []
+                return {}
         return response
 
     async def async_get_supplies(
