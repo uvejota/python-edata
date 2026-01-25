@@ -22,7 +22,7 @@ TOKEN_USERNAME = "username"
 TOKEN_PASSWD = "password"
 
 # Supplies-related constants
-URL_GET_SUPPLIES = "https://datadis.es/api-private/api/get-supplies"
+URL_GET_SUPPLIES = "https://datadis.es/api-private/api/get-supplies-v2"
 GET_SUPPLIES_MANDATORY_FIELDS = [
     "cups",
     "validDateFrom",
@@ -32,7 +32,7 @@ GET_SUPPLIES_MANDATORY_FIELDS = [
 ]
 
 # Contracts-related constants
-URL_GET_CONTRACT_DETAIL = "https://datadis.es/api-private/api/get-contract-detail"
+URL_GET_CONTRACT_DETAIL = "https://datadis.es/api-private/api/get-contract-detail-v2"
 GET_CONTRACT_DETAIL_MANDATORY_FIELDS = [
     "startDate",
     "endDate",
@@ -41,7 +41,7 @@ GET_CONTRACT_DETAIL_MANDATORY_FIELDS = [
 ]
 
 # Consumption-related constants
-URL_GET_CONSUMPTION_DATA = "https://datadis.es/api-private/api/get-consumption-data"
+URL_GET_CONSUMPTION_DATA = "https://datadis.es/api-private/api/get-consumption-data-v2"
 GET_CONSUMPTION_DATA_MANDATORY_FIELDS = [
     "time",
     "date",
@@ -50,7 +50,7 @@ GET_CONSUMPTION_DATA_MANDATORY_FIELDS = [
 ]
 
 # Maximeter-related constants
-URL_GET_MAX_POWER = "https://datadis.es/api-private/api/get-max-power"
+URL_GET_MAX_POWER = "https://datadis.es/api-private/api/get-max-power-v2"
 GET_MAX_POWER_MANDATORY_FIELDS = ["time", "date", "maxPower"]
 
 # Timing constants
@@ -98,7 +98,6 @@ class DatadisConnector:
 
     def _get_hash(self, item: str) -> str:
         """Return a hash."""
-
         return hashlib.md5(item.encode()).hexdigest()
 
     def _set_cache(self, key: str, data: dict | None = None) -> None:
@@ -282,6 +281,7 @@ class DatadisConnector:
     async def async_get_supplies(
         self, authorized_nif: str | None = None
     ) -> list[Supply]:
+        """Datadis 'get_supplies' query."""
         data = {}
         if authorized_nif is not None:
             data["authorizedNif"] = authorized_nif
@@ -290,7 +290,7 @@ class DatadisConnector:
         )
         supplies = []
         tomorrow_str = (datetime.today() + timedelta(days=1)).strftime("%Y/%m/%d")
-        for i in response:
+        for i in response.get("supplies", []):
             if all(k in i for k in GET_SUPPLIES_MANDATORY_FIELDS):
                 supplies.append(
                     Supply(
@@ -334,6 +334,7 @@ class DatadisConnector:
     async def async_get_contract_detail(
         self, cups: str, distributor_code: str, authorized_nif: str | None = None
     ) -> list[Contract]:
+        """Datadis 'get_contract_detail' query."""
         data = {"cups": cups, "distributorCode": distributor_code}
         if authorized_nif is not None:
             data["authorizedNif"] = authorized_nif
@@ -342,7 +343,7 @@ class DatadisConnector:
         )
         contracts = []
         tomorrow_str = (datetime.today() + timedelta(days=1)).strftime("%Y/%m/%d")
-        for i in response:
+        for i in response.get("contract", []):
             if all(k in i for k in GET_CONTRACT_DETAIL_MANDATORY_FIELDS):
                 contracts.append(
                     Contract(
@@ -384,7 +385,7 @@ class DatadisConnector:
         point_type: int,
         authorized_nif: str | None = None,
     ) -> list[Energy]:
-
+        """Datadis 'get_consumption_data' query."""
         data = {
             "cups": cups,
             "distributorCode": distributor_code,
@@ -399,7 +400,7 @@ class DatadisConnector:
         response = await self._async_get(URL_GET_CONSUMPTION_DATA, request_data=data)
 
         consumptions = []
-        for i in response:
+        for i in response.get("timeCurve", []):
             if "consumptionKWh" in i:
                 if all(k in i for k in GET_CONSUMPTION_DATA_MANDATORY_FIELDS):
                     hour = str(int(i["time"].split(":")[0]) - 1)
@@ -408,14 +409,26 @@ class DatadisConnector:
                     )
                     if not (start_date <= date_as_dt <= end_date):
                         continue  # skip element if dt is out of range
+
+                    # sanitize these values
+                    _surplus_kwh = i.get("surplusEnergyKWh", 0)
+                    if _surplus_kwh is None:
+                        _surplus_kwh = 0
+                    _generation_kwh = i.get("generationEnergyKWh", 0)
+                    if _generation_kwh is None:
+                        _generation_kwh = 0
+                    _selfconsumption_kwh = i.get("selfConsumptionEnergyKWh", 0)
+                    if _selfconsumption_kwh is None:
+                        _selfconsumption_kwh = 0
+
                     consumptions.append(
                         Energy(
                             datetime=date_as_dt,
                             delta_h=1,
                             consumption_kwh=i["consumptionKWh"],
-                            surplus_kwh=i.get("surplusEnergyKWh", 0),
-                            generation_kwh=i.get("generationEnergyKWh", 0),
-                            selfconsumption_kwh=i.get("selfConsumptionEnergyKWh", 0),
+                            surplus_kwh=_surplus_kwh,
+                            generation_kwh=_generation_kwh,
+                            selfconsumption_kwh=_selfconsumption_kwh,
                             real=i["obtainMethod"] == "Real",
                         )
                     )
@@ -457,6 +470,7 @@ class DatadisConnector:
         end_date: datetime,
         authorized_nif: str | None = None,
     ) -> list[Power]:
+        """Datadis 'get_max_power' query."""
         data = {
             "cups": cups,
             "distributorCode": distributor_code,
@@ -467,7 +481,7 @@ class DatadisConnector:
             data["authorizedNif"] = authorized_nif
         response = await self._async_get(URL_GET_MAX_POWER, request_data=data)
         maxpower_values = []
-        for i in response:
+        for i in response.get("maxPower", []):
             if all(k in i for k in GET_MAX_POWER_MANDATORY_FIELDS):
                 maxpower_values.append(
                     Power(
