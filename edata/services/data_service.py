@@ -445,7 +445,9 @@ class DataService:
 
         return [agg_data[x] for x in agg_data]
 
-    async def _find_missing_stats(self, agg: typing.Literal["day", "month"] = "day") -> list[datetime]:
+    async def _find_missing_stats(
+        self, agg: typing.Literal["day", "month"] = "day"
+    ) -> list[datetime]:
         """Return the list of days that are missing energy data."""
 
         stats = await self.get_statistics(agg, complete=False)

@@ -382,7 +382,9 @@ class EdataDB:
             result = await session.exec(q.list_supply())
             return result.all()
 
-    async def list_contracts(self, cups: str | None = None) -> typing.Sequence[ContractModel]:
+    async def list_contracts(
+        self, cups: str | None = None
+    ) -> typing.Sequence[ContractModel]:
         """List all contract records."""
 
         await self._ensure_tables()

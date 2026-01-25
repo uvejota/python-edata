@@ -36,7 +36,9 @@ class Statistics(BaseModel):
     generation_kwh: float = Field(0)
     generation_by_tariff: list[float] = Field(default_factory=lambda: [0.0, 0.0, 0.0])
     selfconsumption_kwh: float = Field(0)
-    selfconsumption_by_tariff: list[float] = Field(default_factory=lambda: [0.0, 0.0, 0.0])
+    selfconsumption_by_tariff: list[float] = Field(
+        default_factory=lambda: [0.0, 0.0, 0.0]
+    )
 
     @property
     def consumption_p1_kwh(self) -> float:

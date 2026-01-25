@@ -38,4 +38,3 @@ class Contract(BaseModel):
     def power_p2(self) -> float | None:
         """Return power P2."""
         return self.power[1] if len(self.power) > 1 else None
-

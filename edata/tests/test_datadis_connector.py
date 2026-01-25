@@ -8,65 +8,73 @@ from edata.providers.datadis import DatadisConnector
 MOCK_USERNAME = "USERNAME"
 MOCK_PASSWORD = "PASSWORD"
 
-SUPPLIES_RESPONSE = [
-    {
-        "cups": "ESXXXXXXXXXXXXXXXXTEST",
-        "validDateFrom": "2022/03/09",
-        "validDateTo": "2022/10/28",
-        "address": "-",
-        "postalCode": "-",
-        "province": "-",
-        "municipality": "-",
-        "distributor": "-",
-        "pointType": 5,
-        "distributorCode": "2",
-    }
-]
+SUPPLIES_RESPONSE = {
+    "supplies": [
+        {
+            "cups": "ESXXXXXXXXXXXXXXXXTEST",
+            "validDateFrom": "2022/03/09",
+            "validDateTo": "2022/10/28",
+            "address": "-",
+            "postalCode": "-",
+            "province": "-",
+            "municipality": "-",
+            "distributor": "-",
+            "pointType": 5,
+            "distributorCode": "2",
+        }
+    ]
+}
 
-CONTRACTS_RESPONSE = [
-    {
-        "startDate": "2022/03/09",
-        "endDate": "2022/10/28",
-        "marketer": "MARKETER",
-        "distributorCode": "2",
-        "contractedPowerkW": [4.4, 4.4],
-    }
-]
+CONTRACTS_RESPONSE = {
+    "contract": [
+        {
+            "startDate": "2022/03/09",
+            "endDate": "2022/10/28",
+            "marketer": "MARKETER",
+            "distributorCode": "2",
+            "contractedPowerkW": [4.4, 4.4],
+        }
+    ]
+}
 
-CONSUMPTIONS_RESPONSE = [
-    {
-        "date": "2022/10/22",
-        "time": "01:00",
-        "consumptionKWh": 0.203,
-        "surplusEnergyKWh": 0,
-        "obtainMethod": "Real",
-    },
-    {
-        "date": "2022/10/22",
-        "time": "02:00",
-        "consumptionKWh": 0.163,
-        "surplusEnergyKWh": 0,
-        "obtainMethod": "Real",
-    },
-]
+CONSUMPTIONS_RESPONSE = {
+    "timeCurve": [
+        {
+            "date": "2022/10/22",
+            "time": "01:00",
+            "consumptionKWh": 0.203,
+            "surplusEnergyKWh": 0,
+            "obtainMethod": "Real",
+        },
+        {
+            "date": "2022/10/22",
+            "time": "02:00",
+            "consumptionKWh": 0.163,
+            "surplusEnergyKWh": 0,
+            "obtainMethod": "Real",
+        },
+    ]
+}
 
-MAXIMETER_RESPONSE = [
-    {
-        "date": "2022/03/10",
-        "time": "14:15",
-        "maxPower": 2.436,
-    },
-    {
-        "date": "2022/03/14",
-        "time": "13:15",
-        "maxPower": 3.008,
-    },
-    {
-        "date": "2022/03/27",
-        "time": "10:30",
-        "maxPower": 3.288,
-    },
-]
+MAXIMETER_RESPONSE = {
+    "maxPower": [
+        {
+            "date": "2022/03/10",
+            "time": "14:15",
+            "maxPower": 2.436,
+        },
+        {
+            "date": "2022/03/14",
+            "time": "13:15",
+            "maxPower": 3.008,
+        },
+        {
+            "date": "2022/03/27",
+            "time": "10:30",
+            "maxPower": 3.288,
+        },
+    ]
+}
 
 
 @patch("aiohttp.ClientSession.get")
@@ -157,7 +165,7 @@ def test_get_supplies_empty_response(mock_token, mock_get, snapshot):
     mock_response = MagicMock()
     mock_response.status = 200
     mock_response.text = AsyncMock(return_value="text")
-    mock_response.json = AsyncMock(return_value=[])
+    mock_response.json = AsyncMock(return_value={"supplies": []})
     mock_get.return_value.__aenter__.return_value = mock_response
     connector = DatadisConnector(MOCK_USERNAME, MOCK_PASSWORD)
     assert connector.get_supplies() == snapshot
@@ -169,7 +177,7 @@ def test_get_supplies_empty_response(mock_token, mock_get, snapshot):
 )
 def test_get_supplies_malformed_response(mock_token, mock_get, snapshot):
     """Test get_supplies with malformed response (missing required fields, syrupy snapshot)."""
-    malformed = [{"validDateFrom": "2022/03/09"}]  # missing 'cups', etc.
+    malformed = {"supplies": [{"validDateFrom": "2022/03/09"}]}  # missing 'cups', etc.
     mock_response = MagicMock()
     mock_response.status = 200
     mock_response.text = AsyncMock(return_value="text")
@@ -185,10 +193,10 @@ def test_get_supplies_malformed_response(mock_token, mock_get, snapshot):
 )
 def test_get_supplies_partial_response(mock_token, mock_get, snapshot):
     """Test get_supplies with partial valid/invalid response."""
-    partial = [
-        SUPPLIES_RESPONSE[0],
+    partial = {"supplies": [
+        SUPPLIES_RESPONSE["supplies"][0],
         {"validDateFrom": "2022/03/09"},  # invalid
-    ]
+    ]}
     mock_response = MagicMock()
     mock_response.status = 200
     mock_response.text = AsyncMock(return_value="text")
@@ -244,20 +252,22 @@ def test_get_consumption_data_cache(mock_token, mock_get, snapshot):
 )
 def test_get_supplies_optional_fields_none(mock_token, mock_get, snapshot):
     """Test get_supplies with optional fields as None."""
-    response = [
-        {
-            "cups": "ESXXXXXXXXXXXXXXXXTEST",
-            "validDateFrom": "2022/03/09",
-            "validDateTo": "2022/10/28",
-            "address": None,
-            "postalCode": None,
-            "province": None,
-            "municipality": None,
-            "distributor": None,
-            "pointType": 5,
-            "distributorCode": "2",
-        }
-    ]
+    response = {
+        "supplies": [
+            {
+                "cups": "ESXXXXXXXXXXXXXXXXTEST",
+                "validDateFrom": "2022/03/09",
+                "validDateTo": "2022/10/28",
+                "address": None,
+                "postalCode": None,
+                "province": None,
+                "municipality": None,
+                "distributor": None,
+                "pointType": 5,
+                "distributorCode": "2",
+            }
+        ]
+    }
     mock_response = MagicMock()
     mock_response.status = 200
     mock_response.text = AsyncMock(return_value="text")
