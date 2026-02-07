@@ -403,7 +403,14 @@ class DatadisConnector:
         for i in response.get("timeCurve", []):
             if "consumptionKWh" in i:
                 if all(k in i for k in GET_CONSUMPTION_DATA_MANDATORY_FIELDS):
-                    hour = str(int(i["time"].split(":")[0]) - 1)
+                    raw_hour = int(i["time"].split(":")[0])
+                    if raw_hour == 0:
+                        hour = "23"
+                        i["date"] = (datetime.strptime(i["date"], "%Y/%m/%d") -
+                    timedelta(days=1)).strftime("%Y/%m/%d")
+                    else:
+                        hour = str(raw_hour - 1)
+                    # hour = str(int(i["time"].split(":")[0]) - 1)
                     date_as_dt = datetime.strptime(
                         f"{i['date']} {hour.zfill(2)}:00", "%Y/%m/%d %H:%M"
                     )
