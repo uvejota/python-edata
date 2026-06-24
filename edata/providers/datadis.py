@@ -403,10 +403,9 @@ class DatadisConnector:
         for i in response.get("timeCurve", []):
             if "consumptionKWh" in i:
                 if all(k in i for k in GET_CONSUMPTION_DATA_MANDATORY_FIELDS):
-                    hour = str(int(i["time"].split(":")[0]) - 1)
                     date_as_dt = datetime.strptime(
-                        f"{i['date']} {hour.zfill(2)}:00", "%Y/%m/%d %H:%M"
-                    )
+                        i["date"], "%Y/%m/%d"
+                    ) + timedelta(hours=int(i["time"].split(":")[0]) - 1)
                     if not (start_date <= date_as_dt <= end_date):
                         continue  # skip element if dt is out of range
 
