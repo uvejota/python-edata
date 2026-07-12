@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta
 import json
 import os
 from tempfile import gettempdir
@@ -7,6 +8,7 @@ import pytest
 import pytest_asyncio
 from syrupy.assertion import SnapshotAssertion
 
+from edata.core.utils import get_day
 from edata.models.bill import BillingRules
 from edata.models.data import Energy, Power
 from edata.models.supply import Contract, Supply
@@ -211,3 +213,22 @@ async def test_clear_bills(populated_data_service, energy, storage_dir):
     assert len(await bs.get_bills("hour")) == 0
     assert len(await bs.get_bills(type_="day")) == 0
     assert len(await bs.get_bills(type_="month")) == 0
+
+
+@pytest.mark.asyncio
+async def test_update_pvpc_clamps_range_to_min_date(populated_data_service):
+    ds = populated_data_service
+    now = datetime.now()
+    stale_dt = now - timedelta(days=90)
+
+    with (
+        patch.object(ds, "_get_last_pvpc_dt", AsyncMock(return_value=stale_dt)),
+        patch.object(
+            ds.redata, "async_get_realtime_prices", AsyncMock(return_value=[])
+        ) as mock_fetch,
+    ):
+        await ds.update_pvpc(now - timedelta(days=365), now)
+
+    mock_fetch.assert_awaited_once()
+    called_start = mock_fetch.await_args.args[0]
+    assert called_start >= get_day(now) - timedelta(days=28)
