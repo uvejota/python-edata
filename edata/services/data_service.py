@@ -109,6 +109,11 @@ class DataService:
         data = await self.db.list_statistics(self._cups, type_, start, end, complete)
         return [x.data for x in data]
 
+    async def get_last_energy_dt(self) -> datetime | None:
+        """Return the timestamp of the latest energy record."""
+
+        return await self._get_last_energy_dt()
+
     async def fix_missing_statistics(self) -> None:
         """Recompile statistics to fix missing data."""
 

@@ -154,3 +154,60 @@ async def test_bill_service(
     assert len(monthly_stats) > 0
 
     assert monthly_stats == snapshot
+
+
+@pytest.mark.asyncio
+async def test_simulate_does_not_persist(
+    populated_data_service, snapshot: SnapshotAssertion, storage_dir
+):
+    bs = BillService("ESXXXXXXXXXXXXXXXXTEST", storage_path=storage_dir)
+
+    before = len(await bs.get_bills())
+
+    rules = BillingRules(
+        p1_kwh_eur=0.30,
+        p2_kwh_eur=0.30,
+        p3_kwh_eur=0.30,
+        p1_kw_year_eur=20,
+        p2_kw_year_eur=10,
+    )
+    simulated = await bs.simulate(billing_rules=rules, is_pvpc=False)
+
+    after = len(await bs.get_bills())
+
+    assert len(simulated) > 0
+    assert before == after
+
+    summary = {
+        "count": len(simulated),
+        "value_eur": round(sum(x.value_eur for x in simulated), 6),
+        "energy_term": round(sum(x.energy_term for x in simulated), 6),
+        "power_term": round(sum(x.power_term for x in simulated), 6),
+        "first": simulated[0],
+        "last": simulated[-1],
+    }
+    assert summary == snapshot
+
+
+@pytest.mark.asyncio
+async def test_clear_bills(populated_data_service, energy, storage_dir):
+    bs = BillService("ESXXXXXXXXXXXXXXXXTEST", storage_path=storage_dir)
+
+    all_energy = sorted(energy, key=lambda x: x.datetime)
+    rules = BillingRules(
+        p1_kwh_eur=0.20,
+        p2_kwh_eur=0.20,
+        p3_kwh_eur=0.20,
+        p1_kw_year_eur=20,
+        p2_kw_year_eur=10,
+    )
+    await bs.update(
+        all_energy[0].datetime, all_energy[-1].datetime, rules, is_pvpc=False
+    )
+    assert len(await bs.get_bills()) > 0
+
+    await bs.clear_bills()
+
+    assert len(await bs.get_bills("hour")) == 0
+    assert len(await bs.get_bills(type_="day")) == 0
+    assert len(await bs.get_bills(type_="month")) == 0

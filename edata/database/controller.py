@@ -374,6 +374,14 @@ class EdataDB:
                 session, queries, items, override=["complete", "confhash"]
             )
 
+    async def clear_bills(self, cups: str, since: datetime | None = None) -> None:
+        """Delete bill records for a cups, optionally only from a datetime onwards."""
+
+        await self._ensure_tables()
+        async with AsyncSession(self.engine) as session:
+            await session.exec(q.delete_bill(cups, since))  # type: ignore[call-overload]
+            await session.commit()
+
     async def list_supplies(self) -> typing.Sequence[SupplyModel]:
         """List all supply records."""
 

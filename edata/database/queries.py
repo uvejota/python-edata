@@ -1,6 +1,7 @@
 import typing
 from datetime import datetime
 
+from sqlalchemy import Delete, delete
 from sqlmodel import asc, desc, select
 from sqlmodel.sql.expression import SelectOfScalar
 
@@ -181,6 +182,15 @@ def get_last_bill(
     query = query.order_by(desc(BillModel.datetime))
     query = query.limit(1)
 
+    return query
+
+
+def delete_bill(cups: str, date_from: datetime | None = None) -> Delete:
+    """Query that deletes bill records, optionally from a datetime onwards."""
+
+    query = delete(BillModel).where(BillModel.cups == cups)
+    if date_from is not None:
+        query = query.where(BillModel.datetime >= date_from)
     return query
 
 

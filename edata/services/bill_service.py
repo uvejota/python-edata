@@ -137,6 +137,39 @@ class BillService:
         await self.update_statistics(start, end)
         await self.fix_missing_statistics()
 
+    async def clear_bills(self, since: datetime | None = None) -> None:
+        """Delete stored bills for this cups, optionally only from a datetime onwards."""
+
+        await self.db.clear_bills(self._cups, since)
+
+    async def simulate(
+        self,
+        billing_rules: BillingRules | PVPCBillingRules | None = None,
+        is_pvpc: bool = True,
+        start: datetime | None = None,
+        end: datetime | None = None,
+    ) -> list[Bill]:
+        """Compile hourly bills for a date range without persisting them."""
+
+        if not billing_rules:
+            _LOGGER.info("%s non explicit billing rules, assuming PVPC", self._scups)
+            billing_rules = PVPCBillingRules()
+            is_pvpc = True
+
+        contracts = await self._get_contracts()
+        energy = await self._get_energy(start, end)
+
+        if is_pvpc:
+            pvpc = await self._get_pvpc(start, end)
+            billing_rules = PVPCBillingRules(**billing_rules.model_dump())
+            return await asyncio.to_thread(
+                self.simulate_pvpc, contracts, energy, pvpc, billing_rules
+            )
+
+        return await asyncio.to_thread(
+            self.simulate_custom, contracts, energy, billing_rules
+        )
+
     async def update_statistics(self, start: datetime, end: datetime):
         """Update the statistics during a period."""
 
