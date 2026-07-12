@@ -5785,3 +5785,13 @@
     Statistics(datetime=datetime.datetime(2022, 10, 1, 0, 0), delta_h=555.0, consumption_kwh=238.8920000000002, consumption_by_tariff=[54.46200000000002, 60.62, 123.80999999999993], surplus_kwh=0.0, surplus_by_tariff=[0.0, 0.0, 0.0], generation_kwh=0.0, generation_by_tariff=[0.0, 0.0, 0.0], selfconsumption_kwh=0.0, selfconsumption_by_tariff=[0.0, 0.0, 0.0]),
   ])
 # ---
+# name: test_simulate_does_not_persist
+  dict({
+    'count': 5497,
+    'energy_term': 887.022222,
+    'first': Bill(datetime=datetime.datetime(2022, 3, 9, 1, 0), delta_h=1.0, value_eur=0.08623600000000001, energy_term=0.063721, power_term=0.021154, others_term=0.001361, surplus_term=0.0),
+    'last': Bill(datetime=datetime.datetime(2022, 10, 24, 2, 0), delta_h=1.0, value_eur=0.078986, energy_term=0.056471, power_term=0.021154, others_term=0.001361, surplus_term=0.0),
+    'power_term': 116.283538,
+    'value_eur': 1010.787177,
+  })
+# ---
