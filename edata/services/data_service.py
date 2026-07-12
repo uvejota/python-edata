@@ -316,7 +316,9 @@ class DataService:
             # end date out of bounds
             return False
         if _pvpc_dt := await self._get_last_pvpc_dt():
-            start = _pvpc_dt + timedelta(hours=1)
+            # keep within the fetchable window even if the last stored price is
+            # older than a month, otherwise REData rejects the range with a 400
+            start = max(_pvpc_dt + timedelta(hours=1), min_date)
             if start >= end:
                 _LOGGER.info("%s pvpc prices are already synced", self._scups)
                 # data is already synced
