@@ -3,7 +3,7 @@ import os
 import typing
 from datetime import datetime
 
-from sqlalchemy import Select, insert
+from sqlalchemy import Select, event, insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from sqlmodel import SQLModel
@@ -28,6 +28,25 @@ _LOGGER = logging.getLogger(__name__)
 T = typing.TypeVar("T", bound=SQLModel)
 
 
+def _set_sqlite_pragmas(dbapi_connection, connection_record) -> None:
+    """Tune SQLite for this write-heavy, single-writer workload.
+
+    WAL lets readers proceed while a write is in flight and avoids an fsync per
+    statement; synchronous=NORMAL is durable under WAL (only a crash mid-checkpoint
+    could lose the last transaction, and the data is re-fetchable from Datadis);
+    busy_timeout avoids spurious "database is locked" errors under concurrency.
+    journal_mode is persisted in the file; the others are per-connection.
+    """
+
+    cursor = dbapi_connection.cursor()
+    try:
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA synchronous=NORMAL")
+        cursor.execute("PRAGMA busy_timeout=5000")
+    finally:
+        cursor.close()
+
+
 class EdataDB:
 
     _instance = None
@@ -39,10 +58,11 @@ class EdataDB:
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             cls._db_url = db_url
-            cls._engine = create_async_engine(db_url, future=True)
-            # Ensure parent directory exists
+            # Ensure parent directory exists before the first connection is opened.
             dir_path = os.path.dirname(os.path.abspath(sqlite_path))
             os.makedirs(dir_path, exist_ok=True)
+            cls._engine = create_async_engine(db_url, future=True)
+            event.listen(cls._engine.sync_engine, "connect", _set_sqlite_pragmas)
             cls._instance._tables_initialized = False
         elif db_url != cls._db_url:
             raise ValueError("EdataDB already initialized with a different db_url")

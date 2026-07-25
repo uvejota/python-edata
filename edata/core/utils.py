@@ -2,6 +2,7 @@
 
 import logging
 from datetime import datetime
+from functools import lru_cache
 from pathlib import Path
 
 import holidays
@@ -19,10 +20,22 @@ TARIFF_BY_WEEKDAY = [[], [], [5, 6]]
 _LOGGER = logging.getLogger(__name__)
 
 
+@lru_cache(maxsize=None)
+def _es_holidays(year: int) -> holidays.HolidayBase:
+    """Return (and cache) Spanish holidays for a single year.
+
+    Building the holidays calendar is expensive; get_tariff is called once per
+    hourly record, so without this cache a full-history rebuild spends minutes
+    reconstructing the same handful of yearly calendars.
+    """
+
+    return holidays.country_holidays("ES", years=year)
+
+
 def get_tariff(dt: datetime) -> int:
     """Return the tariff for the selected datetime."""
 
-    hdays = holidays.country_holidays("ES")
+    hdays = _es_holidays(dt.year)
     hour = dt.hour
     weekday = dt.weekday()
 
