@@ -286,7 +286,7 @@ class BillService:
         missing = await self._find_missing_stats()
         for day in missing:
             _LOGGER.debug("%s updating daily statistics for date %s", self._scups, day)
-            end = day + relativedelta.relativedelta(day=1) - timedelta(minutes=1)
+            end = day + relativedelta.relativedelta(days=1) - timedelta(minutes=1)
             await self._update_daily_statistics(day, end)
 
         missing_months = list(set([get_month(x) for x in missing]))

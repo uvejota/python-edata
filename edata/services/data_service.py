@@ -120,7 +120,7 @@ class DataService:
         missing = await self._find_missing_stats()
         for day in missing:
             _LOGGER.info("%s updating daily statistics for date %s", self._scups, day)
-            end = day + relativedelta.relativedelta(day=1) - timedelta(hours=1)
+            end = day + relativedelta.relativedelta(days=1) - timedelta(hours=1)
             await self._update_daily_statistics(day, end)
 
         missing_months = await self._find_missing_stats("month")
@@ -128,7 +128,7 @@ class DataService:
             _LOGGER.info(
                 "%s updating monthly statistics for date %s", self._scups, month
             )
-            end = month + relativedelta.relativedelta(month=1) - timedelta(hours=1)
+            end = month + relativedelta.relativedelta(months=1) - timedelta(hours=1)
             await self._update_monthly_statistics(month, end)
 
     async def update(
