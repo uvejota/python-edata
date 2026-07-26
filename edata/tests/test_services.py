@@ -83,8 +83,7 @@ async def populated_data_service(mock_connector, energy, power, storage_dir):
         await ds.update_energy(start_date, end_date)
         await ds.update_power(start_date, end_date)
 
-        await ds._update_daily_statistics(start_date, end_date)
-        await ds._update_monthly_statistics(start_date, end_date)
+        await ds.update_statistics(start_date, end_date)
 
         return ds
 
