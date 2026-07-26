@@ -1,5 +1,4 @@
 import asyncio
-import calendar
 import logging
 import os
 import typing
@@ -10,6 +9,7 @@ from tempfile import gettempdir
 from dateutil import relativedelta
 from jinja2 import Environment
 
+from edata.core.completion import PendingLedger, is_day_final, is_month_final
 from edata.core.utils import (
     get_db_path,
     get_contract_for_dt,
@@ -143,8 +143,7 @@ class BillService:
             )
 
         _LOGGER.debug("%s updating daily and monthly bills", self._scups)
-        await self.update_statistics(start, end)
-        await self.fix_missing_statistics()
+        await self.update_statistics_incremental()
 
     async def clear_bills(self, since: datetime | None = None) -> None:
         """Delete stored bills for this cups, optionally only from a datetime onwards."""
@@ -180,76 +179,81 @@ class BillService:
         )
 
     async def update_statistics(self, start: datetime, end: datetime):
-        """Update the statistics during a period, one month at a time."""
+        """Compile the daily/monthly bills for a range plus any incomplete backlog."""
 
-        for win_start, win_end in iter_month_windows(start, end):
-            await self._update_daily_statistics(win_start, win_end)
-            await self._update_monthly_statistics(win_start, win_end)
+        ledger = PendingLedger()
+        ledger.mark_range(start, end)
+        await self._seed_pending_backlog(ledger)
+        await self._compile_pending(ledger)
 
-    async def _update_daily_statistics(self, start: datetime, end: datetime) -> None:
-        """Update daily statistics within a date range."""
+    async def update_statistics_incremental(self) -> None:
+        """Compile only the daily/monthly bills that are new or still incomplete.
 
-        day_start = get_day(start)
-        day_end = end
-        daily = await self.db.list_bill(self._cups, "day", day_start, day_end)
+        The pending buckets come from cheap indexed queries (incomplete rows plus
+        the recent range past the last complete bucket), so a sync never rolls up
+        the whole hourly-bill history.
+        """
 
-        complete = []
-        for stat in daily:
-            if stat.complete:
-                complete.append(stat.datetime)
-                continue
+        ledger = PendingLedger()
+        await self._seed_pending_backlog(ledger)
+        await self._seed_pending_recent(ledger)
+        await self._compile_pending(ledger)
 
-        data = await self.get_bills(day_start, day_end)
-        stats = await asyncio.to_thread(
-            self._compile_statistics, data, get_day, skip=complete
-        )
+    async def _seed_pending_backlog(self, ledger: PendingLedger) -> None:
+        """Seed the ledger with the buckets whose stored bills are incomplete."""
 
-        for stat in stats:
-            is_complete = stat.delta_h == 24
-            await self.db.add_bill(self._cups, "day", stat, "mix", is_complete)
-            if not is_complete:
-                _LOGGER.info(
-                    "%s daily statistics for %s are incomplete",
-                    self._scups,
-                    stat.datetime.date(),
-                )
+        day_incomplete = await self.db.list_bill(self._cups, "day", complete=False)
+        month_incomplete = await self.db.list_bill(self._cups, "month", complete=False)
+        ledger.add_days(x.datetime for x in day_incomplete)
+        ledger.add_months(x.datetime for x in month_incomplete)
 
-    async def _update_monthly_statistics(self, start: datetime, end: datetime) -> None:
-        """Update monthly statistics within a date range."""
+    async def _seed_pending_recent(self, ledger: PendingLedger) -> None:
+        """Seed the ledger with the range past the last complete daily bill."""
 
-        month_start = get_month(start)
-        month_end = end
-        monthly = await self.db.list_bill(self._cups, "month", month_start, month_end)
+        last_bill = await self.db.get_last_bill(self._cups)
+        if not last_bill:
+            return
 
-        complete = []
-        for stat in monthly:
-            if stat.complete:
-                complete.append(stat.datetime)
-                continue
-
-        data = await self.get_bills(month_start, month_end)
-        stats = await asyncio.to_thread(
-            self._compile_statistics, data, get_month, skip=complete
-        )
-
-        for stat in stats:
-            target_hours = (
-                calendar.monthrange(stat.datetime.year, stat.datetime.month)[1] * 24
+        last_complete = await self.db.get_last_complete_bill(self._cups, "day")
+        if last_complete:
+            start = get_day(last_complete.datetime) + timedelta(days=1)
+        else:
+            supply = await self.db.get_supply(self._cups)
+            start = get_day(
+                supply.data.date_start if supply else last_bill.datetime
             )
-            is_complete = stat.delta_h == target_hours
-            await self.db.add_bill(self._cups, "month", stat, "mix", is_complete)
-            if not is_complete:
-                _LOGGER.info(
-                    "%s monthly statistics for %s are incomplete",
-                    self._scups,
-                    stat.datetime.date(),
+        ledger.mark_range(start, last_bill.datetime)
+
+    async def _compile_pending(self, ledger: PendingLedger) -> None:
+        """Roll up the pending buckets, one month of hourly bills loaded at a time."""
+
+        now = datetime.now()
+        for month in ledger.sorted_months():
+            month_end = (
+                month + relativedelta.relativedelta(months=1) - timedelta(microseconds=1)
+            )
+            data = await self.get_bills(month, month_end, "hour")
+
+            for day in ledger.days_in(month):
+                day_end = day + timedelta(days=1) - timedelta(microseconds=1)
+                day_data = [x for x in data if day <= x.datetime <= day_end]
+                stat = await asyncio.to_thread(
+                    self._compile_statistics, day_data, get_day
                 )
+                delta_h = stat[0].delta_h if stat else 0.0
+                final = is_day_final(day, delta_h, now)
+                if stat:
+                    await self.db.add_bill(self._cups, "day", stat[0], "mix", final)
+                ledger.resolve_day(day, final=final)
 
-    async def _find_missing_stats(self) -> list[datetime]:
-        """Return the list of days that are missing billing data."""
-
-        stats = await self.db.list_bill(self._cups, "day", complete=False)
-        return [x.datetime for x in stats]
+            month_stat = await asyncio.to_thread(
+                self._compile_statistics, data, get_month
+            )
+            delta_h = month_stat[0].delta_h if month_stat else 0.0
+            final = is_month_final(month, delta_h, now)
+            if month_stat:
+                await self.db.add_bill(self._cups, "month", month_stat[0], "mix", final)
+            ledger.resolve_month(month, final=final)
 
     def _compile_statistics(
         self,
@@ -289,23 +293,6 @@ class BillService:
             ref.surplus_term += item.surplus_term
 
         return [agg_data[x] for x in agg_data]
-
-    async def fix_missing_statistics(self) -> None:
-        """Recompile statistics to fix missing data."""
-
-        missing = await self._find_missing_stats()
-        for day in missing:
-            _LOGGER.debug("%s updating daily statistics for date %s", self._scups, day)
-            end = day + relativedelta.relativedelta(days=1) - timedelta(minutes=1)
-            await self._update_daily_statistics(day, end)
-
-        missing_months = list(set([get_month(x) for x in missing]))
-        for month in missing_months:
-            _LOGGER.debug(
-                "%s updating monthly statistics for date %s", self._scups, month
-            )
-            end = month + relativedelta.relativedelta(months=1) - timedelta(minutes=1)
-            await self._update_monthly_statistics(month, end)
 
     def simulate_pvpc(
         self,
