@@ -228,26 +228,6 @@ class EdataDB:
             result = await session.exec(q.get_last_bill(cups))
             return result.first()
 
-    async def get_last_complete_statistic(
-        self, cups: str, type_: typing.Literal["day", "month"]
-    ) -> StatisticsModel | None:
-        """Get the most recent complete statistics record by cups and type."""
-
-        await self._ensure_tables()
-        async with AsyncSession(self.engine) as session:
-            result = await session.exec(q.get_last_complete_statistic(cups, type_))
-            return result.first()
-
-    async def get_last_complete_bill(
-        self, cups: str, type_: typing.Literal["hour", "day", "month"]
-    ) -> BillModel | None:
-        """Get the most recent complete bill record by cups and type."""
-
-        await self._ensure_tables()
-        async with AsyncSession(self.engine) as session:
-            result = await session.exec(q.get_last_complete_bill(cups, type_))
-            return result.first()
-
     async def add_contract(self, cups: str, contract: Contract) -> ContractModel | None:
         """Add or update a contract record."""
 
