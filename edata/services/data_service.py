@@ -11,7 +11,14 @@ from tempfile import gettempdir
 
 from dateutil import relativedelta
 
-from edata.core.utils import get_db_path, get_day, get_month, get_tariff, redacted_cups
+from edata.core.utils import (
+    get_db_path,
+    get_day,
+    get_month,
+    get_tariff,
+    iter_month_windows,
+    redacted_cups,
+)
 from edata.database.controller import EdataDB
 from edata.models import Contract, Energy, Power, Statistics, Supply
 from edata.models.bill import EnergyPrice
@@ -332,10 +339,15 @@ class DataService:
         return False
 
     async def update_statistics(self, start: datetime, end: datetime) -> None:
-        """Update the statistics during a period."""
+        """Update the statistics during a period, one month at a time.
 
-        await self._update_daily_statistics(start, end)
-        await self._update_monthly_statistics(start, end)
+        Iterating monthly windows keeps the energy loaded for compilation bounded
+        to a single month instead of the whole history.
+        """
+
+        for win_start, win_end in iter_month_windows(start, end):
+            await self._update_daily_statistics(win_start, win_end)
+            await self._update_monthly_statistics(win_start, win_end)
 
     async def _update_daily_statistics(self, start: datetime, end: datetime) -> None:
         """Update daily statistics within a date range."""

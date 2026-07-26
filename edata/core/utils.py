@@ -1,10 +1,12 @@
 """Collection of utilities."""
 
 import logging
-from datetime import datetime
+import typing
+from datetime import datetime, timedelta
 from functools import lru_cache
 from pathlib import Path
 
+from dateutil.relativedelta import relativedelta
 import holidays
 
 from edata.models.supply import Contract
@@ -75,6 +77,27 @@ def get_day(dt: datetime) -> datetime:
     """Return a datetime that represents the day start for a provided datetime."""
 
     return dt.replace(hour=0, minute=0, second=0, microsecond=0)
+
+
+def iter_month_windows(
+    start: datetime, end: datetime
+) -> typing.Iterator[tuple[datetime, datetime]]:
+    """Yield contiguous ``(window_start, window_end)`` pairs, one calendar month each.
+
+    Windows are non-overlapping and cover ``[start, end]`` inclusively; the first
+    starts at ``start`` and the last ends at ``end``. Iterating a month at a time
+    keeps the working set bounded to a single month regardless of history length.
+    """
+
+    if end < start:
+        return
+
+    win_start = start
+    while win_start <= end:
+        next_month = get_month(win_start) + relativedelta(months=1)
+        win_end = min(next_month - timedelta(microseconds=1), end)
+        yield win_start, win_end
+        win_start = next_month
 
 
 def redacted_cups(cups: str) -> str:

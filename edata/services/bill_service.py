@@ -16,6 +16,7 @@ from edata.core.utils import (
     get_day,
     get_month,
     get_tariff,
+    iter_month_windows,
     redacted_cups,
 )
 from edata.database.controller import EdataDB
@@ -107,31 +108,39 @@ class BillService:
         # fetch contracts
         contracts = await self._get_contracts()
 
-        # fetch and filter energy items
-        energy = await self._get_energy()
-
-        _LOGGER.debug("%s compiling missing hourly bills", self._scups)
         if is_pvpc:
-            pvpc = await self._get_pvpc()
             billing_rules = PVPCBillingRules(**billing_rules.model_dump())
-            bills = await asyncio.to_thread(
-                self.simulate_pvpc, contracts, energy, pvpc, billing_rules
-            )
             confighash = f"pvpc-{hash(billing_rules.model_dump_json())}"
         else:
-            bills = await asyncio.to_thread(
-                self.simulate_custom, contracts, energy, billing_rules
-            )
             confighash = f"custom-{hash(billing_rules.model_dump_json())}"
 
-        _LOGGER.debug("%s pushing hourly bills", self._scups)
-        await self.db.add_bill_list(
-            cups=self._cups,
-            type_="hour",
-            confhash=confighash,
-            complete=True,
-            bill=bills,
-        )
+        # compile and persist hourly bills one month at a time so the energy
+        # (and simulated bills) held in memory stay bounded to a single month
+        for win_start, win_end in iter_month_windows(start, end):
+            energy = await self._get_energy(win_start, win_end)
+            if not energy:
+                continue
+
+            _LOGGER.debug(
+                "%s compiling hourly bills for %s..%s", self._scups, win_start, win_end
+            )
+            if is_pvpc:
+                pvpc = await self._get_pvpc(win_start, win_end)
+                bills = await asyncio.to_thread(
+                    self.simulate_pvpc, contracts, energy, pvpc, billing_rules
+                )
+            else:
+                bills = await asyncio.to_thread(
+                    self.simulate_custom, contracts, energy, billing_rules
+                )
+
+            await self.db.add_bill_list(
+                cups=self._cups,
+                type_="hour",
+                confhash=confighash,
+                complete=True,
+                bill=bills,
+            )
 
         _LOGGER.debug("%s updating daily and monthly bills", self._scups)
         await self.update_statistics(start, end)
@@ -171,10 +180,11 @@ class BillService:
         )
 
     async def update_statistics(self, start: datetime, end: datetime):
-        """Update the statistics during a period."""
+        """Update the statistics during a period, one month at a time."""
 
-        await self._update_daily_statistics(start, end)
-        await self._update_monthly_statistics(start, end)
+        for win_start, win_end in iter_month_windows(start, end):
+            await self._update_daily_statistics(win_start, win_end)
+            await self._update_monthly_statistics(win_start, win_end)
 
     async def _update_daily_statistics(self, start: datetime, end: datetime) -> None:
         """Update daily statistics within a date range."""
@@ -306,21 +316,17 @@ class BillService:
     ) -> list[Bill]:
         """Compile bills assuming PVPC billing."""
 
-        energy_dt = [x.datetime for x in energy]
-        pvpc_dt = [x.datetime for x in pvpc]
+        # reduce computation to timestamps present in both series and covered
+        # by a contract (set membership instead of nested list scans)
+        common_dt = {x.datetime for x in energy} & {x.datetime for x in pvpc}
+        valid_dt = {
+            dt
+            for dt in common_dt
+            if any(c.date_start <= dt <= c.date_end for c in contracts)
+        }
 
-        # reduce computation range to valid periods
-        pvpc_valid_dt = []
-        for contract in contracts:
-            for dt in pvpc_dt:
-                if dt in pvpc_valid_dt:
-                    continue
-                if contract.date_start <= dt <= contract.date_end:
-                    pvpc_valid_dt.append(dt)
-        pvpc_valid_dt = [x for x in pvpc_valid_dt if x in energy_dt]
-
-        e = {x.datetime: x for x in energy if x.datetime in pvpc_valid_dt}
-        p = {x.datetime: x for x in pvpc if x.datetime in pvpc_valid_dt}
+        e = {x.datetime: x for x in energy if x.datetime in valid_dt}
+        p = {x.datetime: x for x in pvpc if x.datetime in valid_dt}
         b: dict[datetime, Bill] = {}
 
         for dt in e.keys():
