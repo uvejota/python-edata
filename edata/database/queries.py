@@ -152,19 +152,6 @@ def list_statistics(
     return query
 
 
-def get_last_complete_statistic(
-    cups: str, type_: typing.Literal["day", "month"]
-) -> SelectOfScalar[StatisticsModel]:
-    """Query that selects the most recent complete statistics record."""
-
-    query = select(StatisticsModel).where(StatisticsModel.cups == cups)
-    query = query.where(StatisticsModel.type == type_)
-    query = query.where(StatisticsModel.complete == True)  # noqa: E712
-    query = query.order_by(desc(StatisticsModel.datetime))
-    query = query.limit(1)
-    return query
-
-
 def list_bill(
     cups: str,
     type_: typing.Literal["hour", "day", "month"],
@@ -195,19 +182,6 @@ def get_last_bill(
     query = query.order_by(desc(BillModel.datetime))
     query = query.limit(1)
 
-    return query
-
-
-def get_last_complete_bill(
-    cups: str, type_: typing.Literal["hour", "day", "month"]
-) -> SelectOfScalar[BillModel]:
-    """Query that selects the most recent complete bill record."""
-
-    query = select(BillModel).where(BillModel.cups == cups)
-    query = query.where(BillModel.type == type_)
-    query = query.where(BillModel.complete == True)  # noqa: E712
-    query = query.order_by(desc(BillModel.datetime))
-    query = query.limit(1)
     return query
 
 
