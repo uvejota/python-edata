@@ -403,9 +403,17 @@ class DatadisConnector:
         for i in response.get("timeCurve", []):
             if "consumptionKWh" in i:
                 if all(k in i for k in GET_CONSUMPTION_DATA_MANDATORY_FIELDS):
+                    raw_hour = int(i["time"].split(":")[0])
+                    # Datadis delivers hours 1..24 (end-of-interval). A sporadic
+                    # i-DE glitch emits an extra "00:00" row on a day already
+                    # carrying its full 24 hours, so drop it -- 01:00..24:00
+                    # already covers the day -- instead of remapping onto 23:00
+                    # and overlapping that day's 24:00 slot.
+                    if raw_hour == 0:
+                        continue
                     date_as_dt = datetime.strptime(
                         i["date"], "%Y/%m/%d"
-                    ) + timedelta(hours=int(i["time"].split(":")[0]) - 1)
+                    ) + timedelta(hours=raw_hour - 1)
                     if not (start_date <= date_as_dt <= end_date):
                         continue  # skip element if dt is out of range
 

@@ -56,6 +56,34 @@ CONSUMPTIONS_RESPONSE = {
     ]
 }
 
+CONSUMPTIONS_RESPONSE_WITH_ZERO_HOUR = {
+    "timeCurve": [
+        {
+            "date": "2022/10/22",
+            "time": "01:00",
+            "consumptionKWh": 0.203,
+            "surplusEnergyKWh": 0,
+            "obtainMethod": "Real",
+        },
+        {
+            "date": "2022/10/22",
+            "time": "02:00",
+            "consumptionKWh": 0.163,
+            "surplusEnergyKWh": 0,
+            "obtainMethod": "Real",
+        },
+        # Sporadic i-DE glitch: an extra "00:00" row on a day that already
+        # carries its full 24 hours. Must be dropped, not remapped to 23:00.
+        {
+            "date": "2022/10/22",
+            "time": "00:00",
+            "consumptionKWh": 0.999,
+            "surplusEnergyKWh": 0,
+            "obtainMethod": "Real",
+        },
+    ]
+}
+
 MAXIMETER_RESPONSE = {
     "maxPower": [
         {
@@ -130,6 +158,40 @@ def test_get_consumption_data(mock_token, mock_get, snapshot):
         )
         == snapshot
     )
+
+
+@patch("aiohttp.ClientSession.get")
+@patch.object(
+    DatadisConnector, "_async_get_token", new_callable=AsyncMock, return_value=True
+)
+def test_get_consumption_data_skips_zero_hour(mock_token, mock_get):
+    """A stray "00:00" row is dropped, not remapped, and never aborts the fetch."""
+    mock_response = MagicMock()
+    mock_response.status = 200
+    mock_response.text = AsyncMock(return_value="text")
+    mock_response.json = AsyncMock(
+        return_value=CONSUMPTIONS_RESPONSE_WITH_ZERO_HOUR
+    )
+    mock_get.return_value.__aenter__.return_value = mock_response
+    connector = DatadisConnector(MOCK_USERNAME, MOCK_PASSWORD)
+
+    # Range spans the previous day, so a remapped "00:00" -> 2022/10/21 23:00
+    # would fall inside it; its absence proves the explicit skip, not the filter.
+    result = connector.get_consumption_data(
+        "ESXXXXXXXXXXXXXXXXTEST",
+        "2",
+        datetime.datetime(2022, 10, 21, 0, 0, 0),
+        datetime.datetime(2022, 10, 22, 23, 59, 59),
+        "0",
+        5,
+    )
+
+    datetimes = [x.datetime for x in result]
+    assert datetimes == [
+        datetime.datetime(2022, 10, 22, 0, 0),
+        datetime.datetime(2022, 10, 22, 1, 0),
+    ]
+    assert datetime.datetime(2022, 10, 21, 23, 0) not in datetimes
 
 
 @patch("aiohttp.ClientSession.get")
