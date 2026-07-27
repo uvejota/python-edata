@@ -141,5 +141,38 @@ def update_pvpc_bill(
     )
 
 
+async def _migrate_legacy(
+    cups: str, storage_path: str, compile_statistics: bool
+) -> None:
+    """Import a 1.3.3 JSON export into the 2.0 store (no datadis account needed)."""
+
+    service = DataService(cups, "", "", storage_path=storage_path)
+    results = await service.run_migrations(compile_statistics=compile_statistics)
+    if not results:
+        typer.echo("No legacy storage found to migrate.")
+        return
+    for result in results:
+        typer.echo(
+            f"{result.name}: {result.supplies} supplies, {result.contracts} contracts, "
+            f"{result.energy} energy, {result.power} power, {result.pvpc} pvpc"
+        )
+
+
+@app.command()
+def migrate_legacy(
+    cups: Annotated[str, typer.Option(help="The identifier of the Supply")],
+    storage_path: Annotated[
+        str,
+        typer.Option(help="Root dir holding the legacy edata/ folder and edata.db"),
+    ] = "./edata_cli",
+    compile_statistics: Annotated[
+        bool, typer.Option(help="Compile day/month statistics after import")
+    ] = True,
+) -> None:
+    """Import a python-edata 1.3.3 JSON export into the 2.0 SQLite store."""
+
+    asyncio.run(_migrate_legacy(cups, storage_path, compile_statistics))
+
+
 if __name__ == "__main__":
     app()

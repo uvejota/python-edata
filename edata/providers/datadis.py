@@ -59,7 +59,7 @@ QUERY_LIMIT = timedelta(hours=24)  # a datadis limitation, again...
 
 
 # Cache-related constants
-RECENT_CACHE_SUBDIR = "cache"
+RECENT_CACHE_SUBDIR = "edata_cache"
 
 
 def migrate_storage(storage_dir: str) -> None:
