@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "e-data"
-version = "2.0.1"
+version = "2.0.2"
 description = "Python library for managing spanish energy data from various web providers"
 readme = "README.md"
 authors = [
