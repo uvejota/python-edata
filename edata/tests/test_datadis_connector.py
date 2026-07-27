@@ -1,12 +1,22 @@
 """Tests for DatadisConnector (offline)."""
 
 import datetime
+import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from edata.providers.datadis import DatadisConnector
 
 MOCK_USERNAME = "USERNAME"
 MOCK_PASSWORD = "PASSWORD"
+
+
+def test_connector_uses_namespaced_cache_dir(tmp_path) -> None:
+    """A storage_path connector creates the namespaced 'edata_cache' dir."""
+    connector = DatadisConnector(
+        MOCK_USERNAME, MOCK_PASSWORD, storage_path=str(tmp_path)
+    )
+    assert os.path.basename(connector._recent_cache_dir) == "edata_cache"
+    assert (tmp_path / "edata_cache").is_dir()
 
 SUPPLIES_RESPONSE = {
     "supplies": [
