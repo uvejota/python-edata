@@ -19,6 +19,7 @@ from edata.core.utils import (
     redacted_cups,
 )
 from edata.database.controller import EdataDB
+from edata.database.migrations import MigrationResult, run_migrations
 from edata.models import Contract, Energy, Power, Statistics, Supply
 from edata.models.bill import EnergyPrice
 from edata.providers import DatadisConnector, REDataConnector
@@ -55,6 +56,7 @@ class DataService:
             )
             self._authorized_nif = None
 
+        self._storage_path = storage_path
         self.db = EdataDB(get_db_path(storage_path))
 
         # data (in-memory cache)
@@ -316,6 +318,27 @@ class DataService:
             return True
         _LOGGER.warning("%s unable to fetch pvpc prices", self._scups)
         return False
+
+    async def run_migrations(
+        self, compile_statistics: bool = True
+    ) -> list[MigrationResult]:
+        """Run pending data migrations (e.g. import a legacy 1.3.3 JSON export).
+
+        Migrations import raw records only; when anything is imported and
+        ``compile_statistics`` is set, the day/month statistics are compiled from
+        the freshly-imported energy so the history is queryable right away. Bills
+        are left to the normal billing flow (they need user rules).
+        """
+
+        results = await run_migrations(self.db, self._storage_path, self._cups)
+        if not results or not compile_statistics:
+            return results
+
+        supply = await self.get_supply()
+        last_energy_dt = await self._get_last_energy_dt()
+        if supply is not None and last_energy_dt is not None:
+            await self.update_statistics(supply.date_start, last_energy_dt)
+        return results
 
     async def update_statistics(self, start: datetime, end: datetime) -> None:
         """Compile the statistics for a range plus any incomplete backlog."""

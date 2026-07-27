@@ -1,0 +1,55 @@
+{
+  "supplies": [
+    {
+      "cups": "ESXXXXXXXXXXXXXXXXTEST",
+      "date_start": "2023-01-01T00:00:00",
+      "date_end": "2024-12-31T00:00:00",
+      "address": "-",
+      "postal_code": "-",
+      "province": "-",
+      "municipality": "-",
+      "distributor": "-",
+      "pointType": 5,
+      "distributorCode": "2"
+    }
+  ],
+  "contracts": [
+    {
+      "date_start": "2024-01-01T00:00:00",
+      "date_end": "2024-12-31T00:00:00",
+      "marketer": "MARKETER",
+      "distributorCode": "2",
+      "power_p1": 4.6,
+      "power_p2": 4.6
+    },
+    {
+      "date_start": "2023-01-01T00:00:00",
+      "date_end": "2023-12-31T00:00:00",
+      "marketer": "OLD_MARKETER",
+      "distributorCode": "2",
+      "power_p1": 3.3,
+      "power_p2": null
+    }
+  ],
+  "consumptions": [
+    {"datetime": "2024-01-01T00:00:00", "delta_h": 1, "value_kWh": 0.5, "surplus_kWh": 0, "real": true},
+    {"datetime": "2024-01-01T01:00:00", "delta_h": 1, "value_kWh": 0.4, "surplus_kWh": 0, "real": true},
+    {"datetime": "2024-01-01T02:00:00", "delta_h": 1, "value_kWh": 0.3, "surplus_kWh": 0.1, "real": true},
+    {"datetime": "2024-01-01T03:00:00", "delta_h": 1, "value_kWh": 0.6, "surplus_kWh": 0, "real": false},
+    {"datetime": "2024-01-01T04:00:00", "delta_h": 1, "value_kWh": 0.2, "surplus_kWh": 0, "real": true}
+  ],
+  "maximeter": [
+    {"datetime": "2024-01-10T14:15:00", "value_kW": 3.2},
+    {"datetime": "2024-01-20T20:30:00", "value_kW": 4.1}
+  ],
+  "pvpc": [
+    {"datetime": "2024-01-01T00:00:00", "value_eur_kWh": 0.12, "delta_h": 1},
+    {"datetime": "2024-01-01T01:00:00", "value_eur_kWh": 0.11, "delta_h": 1}
+  ],
+  "consumptions_daily_sum": [
+    {"datetime": "2024-01-01T00:00:00", "value_kWh": 2.0, "value_p1_kWh": 1.0, "value_p2_kWh": 0.5, "value_p3_kWh": 0.5, "surplus_kWh": 0.1, "surplus_p1_kWh": 0.1, "surplus_p2_kWh": 0, "surplus_p3_kWh": 0, "delta_h": 5}
+  ],
+  "cost_monthly_sum": [
+    {"datetime": "2024-01-01T00:00:00", "value_eur": 12.34, "energy_term": 10.0, "power_term": 2.0, "others_term": 0.34, "surplus_term": 0, "delta_h": 744}
+  ]
+}
