@@ -44,8 +44,7 @@ class BillService:
     ) -> list[Bill]:
         """Return the list of bills."""
 
-        res = await self.db.list_bill(self._cups, type_, start, end)
-        return [x.data for x in res]
+        return await self.db.list_bill_data(self._cups, type_, start, end)
 
     async def update(
         self,
@@ -434,15 +433,13 @@ class BillService:
         self, start: datetime | None = None, end: datetime | None = None
     ) -> list[Energy]:
         """Get energy."""
-        res = await self.db.list_energy(self._cups, start, end)
-        return [x.data for x in res]
+        return await self.db.list_energy_data(self._cups, start, end)
 
     async def _get_pvpc(
         self, start: datetime | None = None, end: datetime | None = None
     ) -> list[EnergyPrice]:
         """Get PVPC."""
-        res = await self.db.list_pvpc(start, end)
-        return [x.data for x in res]
+        return await self.db.list_pvpc_data(start, end)
 
     async def _get_last_bill_dt(self) -> datetime | None:
         """Return the timestamp of the latest bill record."""

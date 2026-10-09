@@ -88,8 +88,7 @@ class DataService:
     ) -> list[Energy]:
         """Return a list of energy records for the selected cups."""
 
-        res = await self.db.list_energy(self._cups, start, end)
-        return [x.data for x in res]
+        return await self.db.list_energy_data(self._cups, start, end)
 
     async def get_power(
         self, start: datetime | None = None, end: datetime | None = None
@@ -104,8 +103,7 @@ class DataService:
     ) -> list[EnergyPrice]:
         """Return a list of pvpc records (energy prices) for the selected cups."""
 
-        res = await self.db.list_pvpc(start, end)
-        return [x.data for x in res]
+        return await self.db.list_pvpc_data(start, end)
 
     async def get_statistics(
         self,

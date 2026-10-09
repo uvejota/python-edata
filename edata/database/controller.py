@@ -188,23 +188,32 @@ class EdataDB:
     async def _add_or_update_many(
         self,
         session: AsyncSession,
-        records: list[T],
+        model: type[SQLModel],
+        rows: list[dict[str, typing.Any]],
         override: list[str] | None = None,
-    ) -> list[T]:
-        """Insert many records, updating the existing ones, in a single statement.
+    ) -> None:
+        """Insert many rows, updating the existing ones, in a single statement.
 
         Uses SQLite's ``INSERT ... ON CONFLICT DO UPDATE`` so re-syncing rows that
         are already stored costs one bulk statement instead of a savepoint, a
         failed insert and a lookup per row. Existing rows are only rewritten (and
         their ``updated_at`` bumped) when ``data`` or an ``override`` column
         actually changed.
-        """
-        if not records:
-            return []
 
-        table = type(records[0]).__table__  # type: ignore[attr-defined]
-        columns = [c.name for c in table.columns if c.name != "id"]
-        rows = [{c: getattr(record, c) for c in columns} for record in records]
+        Rows are plain column dicts: building an ORM instance per row only to
+        read it back cost about half of a full-history import. Columns missing
+        from a row take the model defaults, resolved once per batch.
+        """
+        if not rows:
+            return
+
+        table = model.__table__  # type: ignore[attr-defined]
+        defaults = {
+            c.name: model.model_fields[c.name].get_default(call_default_factory=True)
+            for c in table.columns
+            if c.name != "id" and c.name not in rows[0]
+        }
+        rows = [{**defaults, **row} for row in rows]
 
         updated = ["data", *(override or [])]
         stmt = sqlite_insert(table)
@@ -219,7 +228,6 @@ class EdataDB:
         connection = await session.connection()
         await connection.execute(stmt, rows)
         await session.commit()
-        return records
 
     async def get_supply(self, cups: str) -> SupplyModel | None:
         """Get a supply record by cups."""
@@ -330,11 +338,11 @@ class EdataDB:
         async with AsyncSession(self.engine) as session:
             unique_map = {item.datetime: item for item in energy}
             unique = list(unique_map.values())
-            items = [
-                EnergyModel(cups=cups, delta_h=x.delta_h, datetime=x.datetime, data=x)
+            rows = [
+                {"cups": cups, "delta_h": x.delta_h, "datetime": x.datetime, "data": x}
                 for x in unique
             ]
-            await self._add_or_update_many(session, items)
+            await self._add_or_update_many(session, EnergyModel, rows)
 
     async def add_power(self, cups: str, power: Power) -> PowerModel | None:
         """Add or update a power record for a given CUPS and Power instance."""
@@ -353,8 +361,8 @@ class EdataDB:
         async with AsyncSession(self.engine) as session:
             unique_map = {item.datetime: item for item in power}
             unique = list(unique_map.values())
-            items = [PowerModel(cups=cups, datetime=x.datetime, data=x) for x in unique]
-            await self._add_or_update_many(session, items)
+            rows = [{"cups": cups, "datetime": x.datetime, "data": x} for x in unique]
+            await self._add_or_update_many(session, PowerModel, rows)
 
     async def add_pvpc(self, pvpc: EnergyPrice) -> PVPCModel | None:
         """Add or update a pvpc record."""
@@ -373,8 +381,8 @@ class EdataDB:
         async with AsyncSession(self.engine) as session:
             unique_map = {item.datetime: item for item in pvpc}
             unique = list(unique_map.values())
-            items = [PVPCModel(datetime=x.datetime, data=x) for x in unique]
-            await self._add_or_update_many(session, items)
+            rows = [{"datetime": x.datetime, "data": x} for x in unique]
+            await self._add_or_update_many(session, PVPCModel, rows)
 
     async def add_statistics(
         self,
@@ -409,13 +417,19 @@ class EdataDB:
         await self._ensure_tables()
         async with AsyncSession(self.engine) as session:
             unique_map = {item.datetime: item for item in statistics}
-            items = [
-                StatisticsModel(
-                    cups=cups, datetime=x.datetime, type=type_, data=x, complete=complete
-                )
+            rows = [
+                {
+                    "cups": cups,
+                    "datetime": x.datetime,
+                    "type": type_,
+                    "complete": complete,
+                    "data": x,
+                }
                 for x in unique_map.values()
             ]
-            await self._add_or_update_many(session, items, override=["complete"])
+            await self._add_or_update_many(
+                session, StatisticsModel, rows, override=["complete"]
+            )
 
     async def add_bill(
         self,
@@ -458,19 +472,19 @@ class EdataDB:
         async with AsyncSession(self.engine) as session:
             unique_map = {item.datetime: item for item in bill}
             unique = list(unique_map.values())
-            items = [
-                BillModel(
-                    cups=cups,
-                    datetime=x.datetime,
-                    type=type_,
-                    confhash=confhash,
-                    complete=complete,
-                    data=x,
-                )
+            rows = [
+                {
+                    "cups": cups,
+                    "datetime": x.datetime,
+                    "type": type_,
+                    "confhash": confhash,
+                    "complete": complete,
+                    "data": x,
+                }
                 for x in unique
             ]
             await self._add_or_update_many(
-                session, items, override=["complete", "confhash"]
+                session, BillModel, rows, override=["complete", "confhash"]
             )
 
     async def clear_bills(self, cups: str, since: datetime | None = None) -> None:
@@ -498,6 +512,54 @@ class EdataDB:
         async with AsyncSession(self.engine) as session:
             result = await session.exec(q.list_contract(cups))
             return result.all()
+
+    async def _list_data(self, query: SelectOfScalar, model: type[SQLModel]) -> list:
+        """Return only the ``data`` payload of the rows selected by ``query``.
+
+        Skips building an ORM instance per row, which nearly halves the cost of
+        reading a month of hourly records.
+        """
+
+        await self._ensure_tables()
+        async with AsyncSession(self.engine) as session:
+            result = await session.exec(
+                query.with_only_columns(model.data)  # type: ignore[attr-defined]
+            )
+            return list(result.all())
+
+    async def list_energy_data(
+        self,
+        cups: str,
+        date_from: datetime | None = None,
+        date_to: datetime | None = None,
+    ) -> list[Energy]:
+        """List the energy data (without row metadata)."""
+
+        return await self._list_data(
+            q.list_energy(cups, date_from, date_to), EnergyModel
+        )
+
+    async def list_pvpc_data(
+        self,
+        date_from: datetime | None = None,
+        date_to: datetime | None = None,
+    ) -> list[EnergyPrice]:
+        """List the pvpc data (without row metadata)."""
+
+        return await self._list_data(q.list_pvpc(date_from, date_to), PVPCModel)
+
+    async def list_bill_data(
+        self,
+        cups: str,
+        type_: typing.Literal["hour", "day", "month"],
+        date_from: datetime | None = None,
+        date_to: datetime | None = None,
+    ) -> list[Bill]:
+        """List the bill data (without row metadata)."""
+
+        return await self._list_data(
+            q.list_bill(cups, type_, date_from, date_to), BillModel
+        )
 
     async def list_energy(
         self,
