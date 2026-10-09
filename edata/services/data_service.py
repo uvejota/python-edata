@@ -399,26 +399,40 @@ class DataService:
             )
             data = await self.get_energy(month, month_end)
 
-            for day in ledger.days_in(month):
-                day_end = day + timedelta(days=1) - timedelta(microseconds=1)
-                day_data = [x for x in data if day <= x.datetime <= day_end]
-                stat = await asyncio.to_thread(
-                    self._compile_statistics, day_data, get_day
-                )
-                delta_h = stat[0].delta_h if stat else 0.0
-                final = is_day_final(day, delta_h, now)
-                if stat:
-                    await self.db.add_statistics(self._cups, "day", stat[0], final)
-                ledger.resolve_day(day, final=final)
-
-            month_stat = await asyncio.to_thread(
-                self._compile_statistics, data, get_month
+            # aggregate the whole month in a single pass (and a single thread hop)
+            day_stats, month_stats = await asyncio.to_thread(
+                self._compile_day_and_month, data
             )
-            delta_h = month_stat[0].delta_h if month_stat else 0.0
+            by_day = {x.datetime: x for x in day_stats}
+
+            done: dict[bool, list[Statistics]] = {True: [], False: []}
+            for day in ledger.days_in(month):
+                stat = by_day.get(day)
+                final = is_day_final(day, stat.delta_h if stat else 0.0, now)
+                if stat:
+                    done[final].append(stat)
+                ledger.resolve_day(day, final=final)
+            for complete, stats in done.items():
+                if stats:
+                    await self.db.add_statistics_list(
+                        self._cups, "day", complete, stats
+                    )
+
+            delta_h = month_stats[0].delta_h if month_stats else 0.0
             final = is_month_final(month, delta_h, now)
-            if month_stat:
-                await self.db.add_statistics(self._cups, "month", month_stat[0], final)
+            if month_stats:
+                await self.db.add_statistics(self._cups, "month", month_stats[0], final)
             ledger.resolve_month(month, final=final)
+
+    def _compile_day_and_month(
+        self, data: list[Energy]
+    ) -> tuple[list[Statistics], list[Statistics]]:
+        """Return the daily and monthly aggregates of a month of energy data."""
+
+        return (
+            self._compile_statistics(data, get_day),
+            self._compile_statistics(data, get_month),
+        )
 
     def _compile_statistics(
         self,

@@ -234,26 +234,38 @@ class BillService:
             )
             data = await self.get_bills(month, month_end, "hour")
 
-            for day in ledger.days_in(month):
-                day_end = day + timedelta(days=1) - timedelta(microseconds=1)
-                day_data = [x for x in data if day <= x.datetime <= day_end]
-                stat = await asyncio.to_thread(
-                    self._compile_statistics, day_data, get_day
-                )
-                delta_h = stat[0].delta_h if stat else 0.0
-                final = is_day_final(day, delta_h, now)
-                if stat:
-                    await self.db.add_bill(self._cups, "day", stat[0], "mix", final)
-                ledger.resolve_day(day, final=final)
-
-            month_stat = await asyncio.to_thread(
-                self._compile_statistics, data, get_month
+            # aggregate the whole month in a single pass (and a single thread hop)
+            day_bills, month_bills = await asyncio.to_thread(
+                self._compile_day_and_month, data
             )
-            delta_h = month_stat[0].delta_h if month_stat else 0.0
+            by_day = {x.datetime: x for x in day_bills}
+
+            done: dict[bool, list[Bill]] = {True: [], False: []}
+            for day in ledger.days_in(month):
+                bill = by_day.get(day)
+                final = is_day_final(day, bill.delta_h if bill else 0.0, now)
+                if bill:
+                    done[final].append(bill)
+                ledger.resolve_day(day, final=final)
+            for complete, bills in done.items():
+                if bills:
+                    await self.db.add_bill_list(
+                        self._cups, "day", "mix", complete, bills
+                    )
+
+            delta_h = month_bills[0].delta_h if month_bills else 0.0
             final = is_month_final(month, delta_h, now)
-            if month_stat:
-                await self.db.add_bill(self._cups, "month", month_stat[0], "mix", final)
+            if month_bills:
+                await self.db.add_bill(self._cups, "month", month_bills[0], "mix", final)
             ledger.resolve_month(month, final=final)
+
+    def _compile_day_and_month(self, data: list[Bill]) -> tuple[list[Bill], list[Bill]]:
+        """Return the daily and monthly aggregates of a month of hourly bills."""
+
+        return (
+            self._compile_statistics(data, get_day),
+            self._compile_statistics(data, get_month),
+        )
 
     def _compile_statistics(
         self,

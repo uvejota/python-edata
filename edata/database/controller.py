@@ -397,6 +397,26 @@ class EdataDB:
                 override=["complete"],
             )
 
+    async def add_statistics_list(
+        self,
+        cups: str,
+        type_: typing.Literal["day", "month"],
+        complete: bool,
+        statistics: list[Statistics],
+    ) -> None:
+        """Add or update a list of statistics records."""
+
+        await self._ensure_tables()
+        async with AsyncSession(self.engine) as session:
+            unique_map = {item.datetime: item for item in statistics}
+            items = [
+                StatisticsModel(
+                    cups=cups, datetime=x.datetime, type=type_, data=x, complete=complete
+                )
+                for x in unique_map.values()
+            ]
+            await self._add_or_update_many(session, items, override=["complete"])
+
     async def add_bill(
         self,
         cups: str,
