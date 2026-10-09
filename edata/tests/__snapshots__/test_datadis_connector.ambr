@@ -52,3 +52,8 @@
     Supply(cups='ESXXXXXXXXXXXXXXXXTEST', date_start=datetime.datetime(2022, 3, 9, 0, 0), date_end=datetime.datetime(2022, 10, 28, 0, 0), address='-', postal_code='-', province='-', municipality='-', distributor='-', point_type=5, distributor_code='2'),
   ])
 # ---
+# name: test_shared_session_is_reused
+  list([
+    Supply(cups='ESXXXXXXXXXXXXXXXXTEST', date_start=datetime.datetime(2022, 3, 9, 0, 0), date_end=datetime.datetime(2022, 10, 28, 0, 0), address='-', postal_code='-', province='-', municipality='-', distributor='-', point_type=5, distributor_code='2'),
+  ])
+# ---

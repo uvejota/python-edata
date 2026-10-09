@@ -1,0 +1,91 @@
+"""Bulk upsert tests for the database controller."""
+
+from collections.abc import AsyncIterator
+from datetime import datetime, timedelta
+
+import pytest
+import pytest_asyncio
+
+from edata.database.controller import EdataDB
+from edata.models import Bill, Energy, Supply
+
+CUPS = "ESXXXXXXXXXXXXXXXXTEST"
+START = datetime(2024, 1, 1)
+
+
+def _reset_singleton() -> None:
+    EdataDB._instance = None
+    EdataDB._engine = None
+    EdataDB._db_url = None
+
+
+@pytest_asyncio.fixture
+async def db(tmp_path) -> AsyncIterator[EdataDB]:
+    """An EdataDB on an isolated on-disk database with one supply."""
+    _reset_singleton()
+    database = EdataDB(str(tmp_path / "edata.db"))
+    await database.add_supply(
+        Supply(
+            cups=CUPS,
+            date_start=START,
+            date_end=START + timedelta(days=30),
+            address=None,
+            postal_code=None,
+            province=None,
+            municipality=None,
+            distributor=None,
+            point_type=5,
+            distributor_code="2",
+        )
+    )
+    yield database
+    if EdataDB._engine is not None:
+        await EdataDB._engine.dispose()
+    _reset_singleton()
+
+
+def _energy(hours: int, kwh: float) -> list[Energy]:
+    return [
+        Energy(
+            datetime=START + timedelta(hours=h),
+            delta_h=1.0,
+            consumption_kwh=kwh,
+            real=True,
+        )
+        for h in range(hours)
+    ]
+
+
+@pytest.mark.asyncio
+async def test_add_energy_list_upserts(db: EdataDB) -> None:
+    await db.add_energy_list(CUPS, _energy(24, 0.1))
+    before = {x.datetime: x for x in await db.list_energy(CUPS)}
+
+    # overlapping batch: first 12 hours unchanged, last 12 changed, 12 new
+    await db.add_energy_list(CUPS, _energy(12, 0.1) + _energy(36, 0.5)[12:])
+    after = {x.datetime: x for x in await db.list_energy(CUPS)}
+
+    assert len(after) == 36
+    for h in range(36):
+        dt = START + timedelta(hours=h)
+        assert after[dt].data.consumption_kwh == (0.1 if h < 12 else 0.5)
+        if h < 12:
+            # unchanged rows are not rewritten
+            assert after[dt].id == before[dt].id
+            assert after[dt].updated_at == before[dt].updated_at
+        elif h < 24:
+            assert after[dt].id == before[dt].id
+            assert after[dt].updated_at > before[dt].updated_at
+
+
+@pytest.mark.asyncio
+async def test_add_bill_list_applies_overrides(db: EdataDB) -> None:
+    bills = [Bill(datetime=START + timedelta(hours=h), delta_h=1) for h in range(3)]
+    await db.add_bill_list(CUPS, "hour", "hash-a", False, bills)
+
+    # same data, only the override columns change
+    await db.add_bill_list(CUPS, "hour", "hash-b", True, bills)
+
+    stored = await db.list_bill(CUPS, "hour")
+    assert len(stored) == 3
+    assert all(x.complete and x.confhash == "hash-b" for x in stored)

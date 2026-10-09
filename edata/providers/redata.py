@@ -1,8 +1,10 @@
 """A REData API connector"""
 
 import asyncio
+import contextlib
 import datetime as dt
 import logging
+import typing
 
 import aiohttp
 from dateutil import parser
@@ -26,8 +28,23 @@ class REDataConnector:
 
     def __init__(
         self,
+        session: aiohttp.ClientSession | None = None,
     ) -> None:
-        """Init method for REDataConnector"""
+        """Init method for REDataConnector
+
+        ``session`` lets the caller share a long-lived aiohttp session; without
+        it a short-lived session is opened per request.
+        """
+        self._session = session
+
+    @contextlib.asynccontextmanager
+    async def _client(self) -> typing.AsyncIterator[aiohttp.ClientSession]:
+        """Yield the shared session, or a short-lived one when none was given."""
+        if self._session is not None:
+            yield self._session
+        else:
+            async with aiohttp.ClientSession() as session:
+                yield session
 
     async def async_get_realtime_prices(
         self, dt_from: dt.datetime, dt_to: dt.datetime, is_ceuta_melilla: bool = False
@@ -41,10 +58,9 @@ class REDataConnector:
         data = []
         _LOGGER.info("GET %s", url)
         timeout = aiohttp.ClientTimeout(total=REQUESTS_TIMEOUT)
-        async with aiohttp.ClientSession(timeout=timeout) as session:
+        async with self._client() as session:
             try:
-                async with session.get(url) as res:
-                    text = await res.text()
+                async with session.get(url, timeout=timeout) as res:
                     if res.status == 200:
                         try:
                             res_json = await res.json()
@@ -53,7 +69,7 @@ class REDataConnector:
                             _LOGGER.error(
                                 "%s returned a malformed response: %s ",
                                 url,
-                                text,
+                                await res.text(),
                             )
                             return data
                         for element in res_list:
@@ -70,7 +86,7 @@ class REDataConnector:
                         _LOGGER.error(
                             "%s returned %s with code %s",
                             url,
-                            text,
+                            await res.text(),
                             res.status,
                         )
             except Exception as e:

@@ -8,7 +8,7 @@ import pytest
 import pytest_asyncio
 from syrupy.assertion import SnapshotAssertion
 
-from edata.core.utils import get_day
+from edata.core.utils import get_day, get_month
 from edata.models.bill import BillingRules
 from edata.models.data import Energy, Power
 from edata.models.supply import Contract, Supply
@@ -231,3 +231,40 @@ async def test_update_pvpc_clamps_range_to_min_date(populated_data_service):
     mock_fetch.assert_awaited_once()
     called_start = mock_fetch.await_args.args[0]
     assert called_start >= get_day(now) - timedelta(days=28)
+
+
+@pytest.mark.asyncio
+async def test_update_power_is_incremental(populated_data_service, power):
+    ds = populated_data_service
+    last_power_dt = max(x.datetime for x in power)
+
+    with (
+        patch.object(ds, "update_energy", AsyncMock(return_value=True)),
+        patch.object(ds, "update_pvpc", AsyncMock(return_value=True)),
+        patch.object(ds, "update_statistics_incremental", AsyncMock()),
+        patch.object(ds, "update_power", AsyncMock(return_value=True)) as mock_power,
+    ):
+        await ds.update()
+        # only refetch from the month of the latest stored peak
+        assert mock_power.await_args.args[0] == get_month(last_power_dt)
+
+        # an explicit start date still forces the full range
+        forced_start = datetime(2020, 1, 1)
+        await ds.update(start_date=forced_start)
+        assert mock_power.await_args.args[0] == forced_start
+
+
+@pytest.mark.asyncio
+async def test_missing_indexes_are_created_on_existing_db(populated_data_service):
+    db = populated_data_service.db
+
+    async with db.engine.begin() as conn:
+        await conn.exec_driver_sql("DROP INDEX IF EXISTS ix_energy_cups_datetime")
+    db._tables_initialized = False
+    await db._ensure_tables()
+
+    async with db.engine.connect() as conn:
+        result = await conn.exec_driver_sql(
+            "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='energy'"
+        )
+        assert "ix_energy_cups_datetime" in {row[0] for row in result}
