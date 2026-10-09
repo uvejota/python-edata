@@ -3,10 +3,11 @@ import os
 import typing
 from datetime import datetime
 
-from sqlalchemy import Select, event, insert
+from sqlalchemy import Select, Table, event, insert, or_
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
-from sqlmodel import SQLModel
+from sqlmodel import SQLModel, UniqueConstraint
 from sqlmodel.ext.asyncio.session import AsyncSession
 from sqlmodel.sql.expression import SelectOfScalar
 
@@ -57,6 +58,22 @@ def _create_missing_indexes(connection) -> None:
     for table in SQLModel.metadata.sorted_tables:
         for index in table.indexes:
             index.create(connection, checkfirst=True)
+
+
+def _conflict_columns(table: Table) -> list[str]:
+    """Return the columns that identify a row for upserts on ``table``.
+
+    That is the table's unique constraint, else its unique index, else its
+    primary key.
+    """
+
+    for constraint in table.constraints:
+        if isinstance(constraint, UniqueConstraint):
+            return [c.name for c in constraint.columns]
+    for index in table.indexes:
+        if index.unique:
+            return [c.name for c in index.columns]
+    return [c.name for c in table.primary_key.columns]
 
 
 class EdataDB:
@@ -171,31 +188,36 @@ class EdataDB:
     async def _add_or_update_many(
         self,
         session: AsyncSession,
-        queries: list[SelectOfScalar],
         records: list[T],
-        batch_size: int = 100,
         override: list[str] | None = None,
     ) -> list[T]:
-        """Updates many records in the database"""
+        """Insert many records, updating the existing ones, in a single statement.
+
+        Uses SQLite's ``INSERT ... ON CONFLICT DO UPDATE`` so re-syncing rows that
+        are already stored costs one bulk statement instead of a savepoint, a
+        failed insert and a lookup per row. Existing rows are only rewritten (and
+        their ``updated_at`` bumped) when ``data`` or an ``override`` column
+        actually changed.
+        """
         if not records:
             return []
 
-        for i in range(0, len(records), batch_size):
-            chunk_records = records[i : i + batch_size]
-            chunk_queries = queries[i : i + batch_size]
-            try:
-                async with session.begin_nested():
-                    session.add_all(chunk_records)
-                    await session.flush()
-            except IntegrityError:
-                for j, record in enumerate(chunk_records):
-                    await self._add_or_update_one(
-                        session,
-                        chunk_queries[j],
-                        record,
-                        commit=False,
-                        override=override,
-                    )
+        table = type(records[0]).__table__  # type: ignore[attr-defined]
+        columns = [c.name for c in table.columns if c.name != "id"]
+        rows = [{c: getattr(record, c) for c in columns} for record in records]
+
+        updated = ["data", *(override or [])]
+        stmt = sqlite_insert(table)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=_conflict_columns(table),
+            set_={
+                **{c: stmt.excluded[c] for c in updated},
+                "updated_at": stmt.excluded.updated_at,
+            },
+            where=or_(*(table.c[c].is_distinct_from(stmt.excluded[c]) for c in updated)),
+        )
+        connection = await session.connection()
+        await connection.execute(stmt, rows)
         await session.commit()
         return records
 
@@ -308,12 +330,11 @@ class EdataDB:
         async with AsyncSession(self.engine) as session:
             unique_map = {item.datetime: item for item in energy}
             unique = list(unique_map.values())
-            queries = [q.get_energy(cups, x.datetime) for x in unique]
             items = [
                 EnergyModel(cups=cups, delta_h=x.delta_h, datetime=x.datetime, data=x)
                 for x in unique
             ]
-            await self._add_or_update_many(session, queries, items)
+            await self._add_or_update_many(session, items)
 
     async def add_power(self, cups: str, power: Power) -> PowerModel | None:
         """Add or update a power record for a given CUPS and Power instance."""
@@ -332,9 +353,8 @@ class EdataDB:
         async with AsyncSession(self.engine) as session:
             unique_map = {item.datetime: item for item in power}
             unique = list(unique_map.values())
-            queries = [q.get_power(cups, x.datetime) for x in unique]
             items = [PowerModel(cups=cups, datetime=x.datetime, data=x) for x in unique]
-            await self._add_or_update_many(session, queries, items)
+            await self._add_or_update_many(session, items)
 
     async def add_pvpc(self, pvpc: EnergyPrice) -> PVPCModel | None:
         """Add or update a pvpc record."""
@@ -353,9 +373,8 @@ class EdataDB:
         async with AsyncSession(self.engine) as session:
             unique_map = {item.datetime: item for item in pvpc}
             unique = list(unique_map.values())
-            queries = [q.get_pvpc(x.datetime) for x in unique]
             items = [PVPCModel(datetime=x.datetime, data=x) for x in unique]
-            await self._add_or_update_many(session, queries, items)
+            await self._add_or_update_many(session, items)
 
     async def add_statistics(
         self,
@@ -419,7 +438,6 @@ class EdataDB:
         async with AsyncSession(self.engine) as session:
             unique_map = {item.datetime: item for item in bill}
             unique = list(unique_map.values())
-            queries = [q.get_bill(cups, type_, x.datetime) for x in unique]
             items = [
                 BillModel(
                     cups=cups,
@@ -432,7 +450,7 @@ class EdataDB:
                 for x in unique
             ]
             await self._add_or_update_many(
-                session, queries, items, override=["complete", "confhash"]
+                session, items, override=["complete", "confhash"]
             )
 
     async def clear_bills(self, cups: str, since: datetime | None = None) -> None:
