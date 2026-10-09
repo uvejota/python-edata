@@ -1,6 +1,7 @@
 import typing
 from datetime import datetime as dt
 
+from pydantic import NaiveDatetime
 from sqlmodel import AutoString, Column, Field, Index, SQLModel, UniqueConstraint
 
 from edata.database.utils import PydanticJSON
@@ -27,8 +28,8 @@ class SupplyModel(SQLModel, table=True):
     cups: str = Field(default=None, primary_key=True)
     data: Supply = Field(sa_column=Column(PydanticJSON(Supply)))
     version: int = Field(default=1)
-    created_at: dt = Field(default_factory=_now, nullable=False)
-    updated_at: dt = Field(
+    created_at: NaiveDatetime = Field(default_factory=_now, nullable=False)
+    updated_at: NaiveDatetime = Field(
         default_factory=_now, nullable=False, sa_column_kwargs={"onupdate": dt.now}
     )
 
@@ -44,12 +45,12 @@ class ContractModel(SQLModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     cups: str = Field(foreign_key="supply.cups", index=True)
-    date_start: dt = Field(index=True)
+    date_start: NaiveDatetime = Field(index=True)
     data: Contract = Field(sa_column=Column(PydanticJSON(Contract)))
 
     version: int = Field(default=1)
-    created_at: dt = Field(default_factory=_now, nullable=False)
-    updated_at: dt = Field(
+    created_at: NaiveDatetime = Field(default_factory=_now, nullable=False)
+    updated_at: NaiveDatetime = Field(
         default_factory=_now, nullable=False, sa_column_kwargs={"onupdate": dt.now}
     )
 
@@ -71,13 +72,13 @@ class EnergyModel(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     cups: str = Field(foreign_key="supply.cups", index=True)
     delta_h: float
-    datetime: dt = Field(index=True)
+    datetime: NaiveDatetime = Field(index=True)
 
     data: Energy = Field(sa_column=Column(PydanticJSON(Energy)))
 
     version: int = Field(default=1)
-    created_at: dt = Field(default_factory=_now, nullable=False)
-    updated_at: dt = Field(
+    created_at: NaiveDatetime = Field(default_factory=_now, nullable=False)
+    updated_at: NaiveDatetime = Field(
         default_factory=_now, nullable=False, sa_column_kwargs={"onupdate": dt.now}
     )
 
@@ -93,13 +94,13 @@ class PowerModel(SQLModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     cups: str = Field(foreign_key="supply.cups", index=True)
-    datetime: dt = Field(index=True)
+    datetime: NaiveDatetime = Field(index=True)
 
     data: Power = Field(sa_column=Column(PydanticJSON(Power)))
 
     version: int = Field(default=1)
-    created_at: dt = Field(default_factory=_now, nullable=False)
-    updated_at: dt = Field(
+    created_at: NaiveDatetime = Field(default_factory=_now, nullable=False)
+    updated_at: NaiveDatetime = Field(
         default_factory=_now, nullable=False, sa_column_kwargs={"onupdate": dt.now}
     )
 
@@ -120,14 +121,14 @@ class StatisticsModel(SQLModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     cups: str = Field(foreign_key="supply.cups", index=True)
-    datetime: dt = Field(index=True)
+    datetime: NaiveDatetime = Field(index=True)
     type: typing.Literal["day", "month"] = Field(index=True, sa_type=AutoString)
     complete: bool = Field(False)
     data: Statistics = Field(sa_column=Column(PydanticJSON(Statistics)))
 
     version: int = Field(default=1)
-    created_at: dt = Field(default_factory=_now, nullable=False)
-    updated_at: dt = Field(
+    created_at: NaiveDatetime = Field(default_factory=_now, nullable=False)
+    updated_at: NaiveDatetime = Field(
         default_factory=_now, nullable=False, sa_column_kwargs={"onupdate": dt.now}
     )
 
@@ -137,12 +138,12 @@ class PVPCModel(SQLModel, table=True):
     __tablename__ = "pvpc"  # type: ignore
 
     id: int | None = Field(default=None, primary_key=True)
-    datetime: dt = Field(index=True, unique=True)
+    datetime: NaiveDatetime = Field(index=True, unique=True)
     data: EnergyPrice = Field(sa_column=Column(PydanticJSON(EnergyPrice)))
 
     version: int = Field(default=1)
-    created_at: dt = Field(default_factory=_now, nullable=False)
-    updated_at: dt = Field(
+    created_at: NaiveDatetime = Field(default_factory=_now, nullable=False)
+    updated_at: NaiveDatetime = Field(
         default_factory=_now, nullable=False, sa_column_kwargs={"onupdate": dt.now}
     )
 
@@ -163,14 +164,14 @@ class BillModel(SQLModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     cups: str = Field(foreign_key="supply.cups", index=True)
-    datetime: dt = Field(index=True)
+    datetime: NaiveDatetime = Field(index=True)
     type: typing.Literal["hour", "day", "month"] = Field(index=True, sa_type=AutoString)
     complete: bool = Field(False)
     confhash: str
     data: Bill = Field(sa_column=Column(PydanticJSON(Bill)))
 
     version: int = Field(default=1)
-    created_at: dt = Field(default_factory=_now, nullable=False)
-    updated_at: dt = Field(
+    created_at: NaiveDatetime = Field(default_factory=_now, nullable=False)
+    updated_at: NaiveDatetime = Field(
         default_factory=_now, nullable=False, sa_column_kwargs={"onupdate": dt.now}
     )
