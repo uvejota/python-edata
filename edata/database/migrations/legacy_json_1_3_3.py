@@ -10,6 +10,8 @@ Self-contained on purpose: everything it needs lives here, so a future version
 can drop this file (and its entry in the registry) once the upgrade window closes.
 """
 
+import asyncio
+from dataclasses import dataclass
 from datetime import datetime
 import json
 import logging
@@ -83,44 +85,68 @@ def _to_pvpc(d: dict) -> EnergyPrice:
     )
 
 
+@dataclass
+class _LegacyRecords:
+    """Records parsed from a legacy JSON export."""
+
+    supplies: list[Supply]
+    contracts: list[Contract]
+    energy: list[Energy]
+    power: list[Power]
+    pvpc: list[EnergyPrice]
+
+
+def _load(path: str) -> _LegacyRecords | None:
+    """Read and parse the legacy file; ``None`` if it does not exist.
+
+    Blocking (file I/O plus building tens of thousands of records), so callers
+    run it in a worker thread to keep the event loop free.
+    """
+
+    if not os.path.isfile(path):
+        return None
+    with open(path, encoding="utf-8") as f:
+        raw = json.load(f)
+    return _LegacyRecords(
+        supplies=[_to_supply(x) for x in raw.get("supplies", [])],
+        contracts=[_to_contract(x) for x in raw.get("contracts", [])],
+        energy=[_to_energy(x) for x in raw.get("consumptions", [])],
+        power=[_to_power(x) for x in raw.get("maximeter", [])],
+        pvpc=[_to_pvpc(x) for x in raw.get("pvpc", [])],
+    )
+
+
 async def apply(db: EdataDB, storage_dir: str, cups: str) -> MigrationResult | None:
     """Import a 1.3.3 JSON export. Returns None (no-op) if the file is absent."""
 
     path = _legacy_path(storage_dir, cups)
-    if not os.path.isfile(path):
+    records = await asyncio.to_thread(_load, path)
+    if records is None:
         return None
 
     _LOGGER.info("Migrating legacy 1.3.3 storage from %s", path)
-    with open(path, encoding="utf-8") as f:
-        raw = json.load(f)
-
     result = MigrationResult(name=NAME)
 
-    supplies = [_to_supply(x) for x in raw.get("supplies", [])]
-    for supply in supplies:
+    for supply in records.supplies:
         await db.add_supply(supply)
-    result.supplies = len(supplies)
+    result.supplies = len(records.supplies)
 
     # Contracts/energy/power reference a supply by cups; take it from the imported
     # supply record rather than the (lower-cased) filename id.
-    target_cups = supplies[0].cups if supplies else cups
+    target_cups = records.supplies[0].cups if records.supplies else cups
 
-    contracts = [_to_contract(x) for x in raw.get("contracts", [])]
-    for contract in contracts:
+    for contract in records.contracts:
         await db.add_contract(target_cups, contract)
-    result.contracts = len(contracts)
+    result.contracts = len(records.contracts)
 
-    energy = [_to_energy(x) for x in raw.get("consumptions", [])]
-    await db.add_energy_list(target_cups, energy)
-    result.energy = len(energy)
+    await db.add_energy_list(target_cups, records.energy)
+    result.energy = len(records.energy)
 
-    power = [_to_power(x) for x in raw.get("maximeter", [])]
-    await db.add_power_list(target_cups, power)
-    result.power = len(power)
+    await db.add_power_list(target_cups, records.power)
+    result.power = len(records.power)
 
-    pvpc = [_to_pvpc(x) for x in raw.get("pvpc", [])]
-    await db.add_pvpc_list(pvpc)
-    result.pvpc = len(pvpc)
+    await db.add_pvpc_list(records.pvpc)
+    result.pvpc = len(records.pvpc)
 
     _LOGGER.info(
         "%s: imported %s supplies, %s contracts, %s energy, %s power, %s pvpc",

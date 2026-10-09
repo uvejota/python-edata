@@ -5,6 +5,7 @@ from datetime import datetime
 import json
 import os
 import shutil
+import threading
 from unittest.mock import patch
 
 import pytest
@@ -175,3 +176,26 @@ async def test_run_migrations_no_legacy_file(data_service: DataService) -> None:
     """run_migrations is a no-op when there is no legacy file."""
     results = await data_service.run_migrations()
     assert results == []
+
+
+@pytest.mark.asyncio
+async def test_apply_reads_legacy_file_off_the_event_loop(
+    data_service: DataService, tmp_path
+) -> None:
+    """The file is read and parsed in a worker thread, not on the event loop.
+
+    Home Assistant flags blocking ``open`` calls made on its event loop.
+    """
+    _install_legacy_file(str(tmp_path))
+    loop_thread = threading.current_thread()
+    load_threads = []
+    real_load = json.load
+
+    def recording_load(*args, **kwargs):
+        load_threads.append(threading.current_thread())
+        return real_load(*args, **kwargs)
+
+    with patch.object(legacy.json, "load", recording_load):
+        assert await legacy.apply(data_service.db, str(tmp_path), CUPS) is not None
+
+    assert load_threads and all(t is not loop_thread for t in load_threads)
