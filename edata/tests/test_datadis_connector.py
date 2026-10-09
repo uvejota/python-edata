@@ -1,12 +1,19 @@
 """Tests for DatadisConnector (offline)."""
 
 import datetime
+import json
 import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from edata.providers.datadis import DatadisConnector
+
+
+def _json_body(payload) -> AsyncMock:
+    """Mock ``reply.read()`` returning ``payload`` as a JSON body."""
+    return AsyncMock(return_value=json.dumps(payload).encode())
+
 
 MOCK_USERNAME = "USERNAME"
 MOCK_PASSWORD = "PASSWORD"
@@ -126,7 +133,7 @@ def test_get_supplies(mock_token, mock_get, snapshot):
     mock_response = MagicMock()
     mock_response.status = 200
     mock_response.text = AsyncMock(return_value="text")
-    mock_response.json = AsyncMock(return_value=SUPPLIES_RESPONSE)
+    mock_response.read = _json_body(SUPPLIES_RESPONSE)
     mock_get.return_value.__aenter__.return_value = mock_response
     connector = DatadisConnector(MOCK_USERNAME, MOCK_PASSWORD)
     assert connector.get_supplies() == snapshot
@@ -141,7 +148,7 @@ def test_get_contract_detail(mock_token, mock_get, snapshot):
     mock_response = MagicMock()
     mock_response.status = 200
     mock_response.text = AsyncMock(return_value="text")
-    mock_response.json = AsyncMock(return_value=CONTRACTS_RESPONSE)
+    mock_response.read = _json_body(CONTRACTS_RESPONSE)
     mock_get.return_value.__aenter__.return_value = mock_response
     connector = DatadisConnector(MOCK_USERNAME, MOCK_PASSWORD)
     assert connector.get_contract_detail("ESXXXXXXXXXXXXXXXXTEST", "2") == snapshot
@@ -156,7 +163,7 @@ def test_get_consumption_data(mock_token, mock_get, snapshot):
     mock_response = MagicMock()
     mock_response.status = 200
     mock_response.text = AsyncMock(return_value="text")
-    mock_response.json = AsyncMock(return_value=CONSUMPTIONS_RESPONSE)
+    mock_response.read = _json_body(CONSUMPTIONS_RESPONSE)
     mock_get.return_value.__aenter__.return_value = mock_response
     connector = DatadisConnector(MOCK_USERNAME, MOCK_PASSWORD)
     assert (
@@ -181,9 +188,7 @@ def test_get_consumption_data_skips_zero_hour(mock_token, mock_get):
     mock_response = MagicMock()
     mock_response.status = 200
     mock_response.text = AsyncMock(return_value="text")
-    mock_response.json = AsyncMock(
-        return_value=CONSUMPTIONS_RESPONSE_WITH_ZERO_HOUR
-    )
+    mock_response.read = _json_body(CONSUMPTIONS_RESPONSE_WITH_ZERO_HOUR)
     mock_get.return_value.__aenter__.return_value = mock_response
     connector = DatadisConnector(MOCK_USERNAME, MOCK_PASSWORD)
 
@@ -215,7 +220,7 @@ def test_get_max_power(mock_token, mock_get, snapshot):
     mock_response = MagicMock()
     mock_response.status = 200
     mock_response.text = AsyncMock(return_value="text")
-    mock_response.json = AsyncMock(return_value=MAXIMETER_RESPONSE)
+    mock_response.read = _json_body(MAXIMETER_RESPONSE)
     mock_get.return_value.__aenter__.return_value = mock_response
     connector = DatadisConnector(MOCK_USERNAME, MOCK_PASSWORD)
     assert (
@@ -239,7 +244,7 @@ def test_get_supplies_empty_response(mock_token, mock_get, snapshot):
     mock_response = MagicMock()
     mock_response.status = 200
     mock_response.text = AsyncMock(return_value="text")
-    mock_response.json = AsyncMock(return_value={"supplies": []})
+    mock_response.read = _json_body({"supplies": []})
     mock_get.return_value.__aenter__.return_value = mock_response
     connector = DatadisConnector(MOCK_USERNAME, MOCK_PASSWORD)
     assert connector.get_supplies() == snapshot
@@ -255,7 +260,7 @@ def test_get_supplies_malformed_response(mock_token, mock_get, snapshot):
     mock_response = MagicMock()
     mock_response.status = 200
     mock_response.text = AsyncMock(return_value="text")
-    mock_response.json = AsyncMock(return_value=malformed)
+    mock_response.read = _json_body(malformed)
     mock_get.return_value.__aenter__.return_value = mock_response
     connector = DatadisConnector(MOCK_USERNAME, MOCK_PASSWORD)
     assert connector.get_supplies() == snapshot
@@ -274,7 +279,7 @@ def test_get_supplies_partial_response(mock_token, mock_get, snapshot):
     mock_response = MagicMock()
     mock_response.status = 200
     mock_response.text = AsyncMock(return_value="text")
-    mock_response.json = AsyncMock(return_value=partial)
+    mock_response.read = _json_body(partial)
     mock_get.return_value.__aenter__.return_value = mock_response
     connector = DatadisConnector(MOCK_USERNAME, MOCK_PASSWORD)
     assert connector.get_supplies() == snapshot
@@ -289,7 +294,7 @@ def test_get_consumption_data_cache(mock_token, mock_get, snapshot):
     mock_response = MagicMock()
     mock_response.status = 200
     mock_response.text = AsyncMock(return_value="text")
-    mock_response.json = AsyncMock(return_value=CONSUMPTIONS_RESPONSE)
+    mock_response.read = _json_body(CONSUMPTIONS_RESPONSE)
     mock_get.return_value.__aenter__.return_value = mock_response
     connector = DatadisConnector(MOCK_USERNAME, MOCK_PASSWORD)
     # First call populates cache
@@ -345,7 +350,7 @@ def test_get_supplies_optional_fields_none(mock_token, mock_get, snapshot):
     mock_response = MagicMock()
     mock_response.status = 200
     mock_response.text = AsyncMock(return_value="text")
-    mock_response.json = AsyncMock(return_value=response)
+    mock_response.read = _json_body(response)
     mock_get.return_value.__aenter__.return_value = mock_response
     connector = DatadisConnector(MOCK_USERNAME, MOCK_PASSWORD)
     assert connector.get_supplies() == snapshot
@@ -359,7 +364,7 @@ async def test_shared_session_is_reused(mock_token, tmp_path, snapshot):
     """A caller-provided session serves the requests and is left open."""
     mock_response = MagicMock()
     mock_response.status = 200
-    mock_response.json = AsyncMock(return_value=SUPPLIES_RESPONSE)
+    mock_response.read = _json_body(SUPPLIES_RESPONSE)
     session = MagicMock()
     session.get.return_value.__aenter__.return_value = mock_response
     session.close = AsyncMock()

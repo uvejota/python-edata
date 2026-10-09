@@ -43,7 +43,7 @@ async def db(tmp_path) -> AsyncIterator[EdataDB]:
     )
     yield database
     if EdataDB._engine is not None:
-        await EdataDB._engine.dispose()
+        EdataDB._engine.dispose()
     _reset_singleton()
 
 
@@ -97,14 +97,14 @@ async def test_add_bill_list_applies_overrides(db: EdataDB) -> None:
 @pytest.mark.asyncio
 async def test_concurrent_first_calls_do_not_race_index_creation(db: EdataDB) -> None:
     # simulate a database created before the index existed, opened fresh
-    async with db.engine.begin() as conn:
-        await conn.exec_driver_sql("DROP INDEX ix_energy_cups_datetime")
+    with db.engine.begin() as conn:
+        conn.exec_driver_sql("DROP INDEX ix_energy_cups_datetime")
     db._tables_initialized = False
 
     await asyncio.gather(*(db.get_last_energy(CUPS) for _ in range(10)))
 
-    async with db.engine.connect() as conn:
-        result = await conn.exec_driver_sql(
+    with db.engine.connect() as conn:
+        result = conn.exec_driver_sql(
             "SELECT name FROM sqlite_master WHERE name='ix_energy_cups_datetime'"
         )
         assert result.first() is not None

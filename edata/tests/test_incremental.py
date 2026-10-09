@@ -32,7 +32,7 @@ async def data_service(tmp_path) -> AsyncIterator[DataService]:
         service = DataService(CUPS, "user", "pwd", storage_path=str(tmp_path))
     yield service
     if EdataDB._engine is not None:
-        await EdataDB._engine.dispose()
+        EdataDB._engine.dispose()
     _reset_singleton()
 
 

@@ -258,13 +258,13 @@ async def test_update_power_is_incremental(populated_data_service, power):
 async def test_missing_indexes_are_created_on_existing_db(populated_data_service):
     db = populated_data_service.db
 
-    async with db.engine.begin() as conn:
-        await conn.exec_driver_sql("DROP INDEX IF EXISTS ix_energy_cups_datetime")
+    with db.engine.begin() as conn:
+        conn.exec_driver_sql("DROP INDEX IF EXISTS ix_energy_cups_datetime")
     db._tables_initialized = False
-    await db._ensure_tables()
+    await db.list_supplies()  # any call lazily re-runs the table/index setup
 
-    async with db.engine.connect() as conn:
-        result = await conn.exec_driver_sql(
+    with db.engine.connect() as conn:
+        result = conn.exec_driver_sql(
             "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='energy'"
         )
         assert "ix_energy_cups_datetime" in {row[0] for row in result}
