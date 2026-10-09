@@ -78,7 +78,15 @@ class DatadisConnector:
         password: str,
         enable_smart_fetch: bool = True,
         storage_path: str | None = None,
+        session: aiohttp.ClientSession | None = None,
     ) -> None:
+        """Init the connector.
+
+        ``session`` lets the caller share a long-lived aiohttp session (e.g. Home
+        Assistant's) so requests reuse pooled TLS connections; without it a
+        short-lived session is opened per request.
+        """
+        self._session = session
         self._usr = username
         self._pwd = password
         self._token = {}
@@ -95,6 +103,15 @@ class DatadisConnector:
             )
         os.makedirs(self._recent_cache_dir, exist_ok=True)
         self._cache = diskcache.Cache(self._recent_cache_dir)
+
+    @contextlib.asynccontextmanager
+    async def _client(self) -> typing.AsyncIterator[aiohttp.ClientSession]:
+        """Yield the shared session, or a short-lived one when none was given."""
+        if self._session is not None:
+            yield self._session
+        else:
+            async with aiohttp.ClientSession() as session:
+                yield session
 
     def _get_hash(self, item: str) -> str:
         """Return a hash."""
@@ -127,7 +144,7 @@ class DatadisConnector:
         _LOGGER.debug("No token found, fetching a new one")
         is_valid_token = False
         timeout = aiohttp.ClientTimeout(total=TIMEOUT)
-        async with aiohttp.ClientSession(timeout=timeout) as session:
+        async with self._client() as session:
             try:
                 async with session.post(
                     URL_TOKEN,
@@ -135,6 +152,7 @@ class DatadisConnector:
                         TOKEN_USERNAME: self._usr,
                         TOKEN_PASSWD: self._pwd,
                     },
+                    timeout=timeout,
                 ) as response:
                     text = await response.text()
                     if response.status == 200:
@@ -209,12 +227,14 @@ class DatadisConnector:
                 if self._token.get("headers"):
                     headers.update(self._token["headers"])
                 timeout = aiohttp.ClientTimeout(total=TIMEOUT)
-                async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with self._client() as session:
                     async with session.get(
                         url + params,
                         headers=headers,
+                        timeout=timeout,
                     ) as reply:
-                        text = await reply.text()
+                        # the body is only needed as text to log errors; decoding
+                        # it here as well would decode every (large) payload twice
                         if reply.status == 200:
                             try:
                                 json_data = await reply.json(content_type=None)
@@ -247,7 +267,7 @@ class DatadisConnector:
                             _LOGGER.warning(
                                 "%s with message '%s'",
                                 reply.status,
-                                text,
+                                await reply.text(),
                             )
                             if not ignore_cache:
                                 await asyncio.to_thread(self._set_cache, url + params)
@@ -256,7 +276,7 @@ class DatadisConnector:
                                 _LOGGER.warning(
                                     "%s with message '%s'. %s. %s",
                                     reply.status,
-                                    text,
+                                    await reply.text(),
                                     "Query temporary disabled",
                                     "Future 500 code errors for this query will be silenced until restart",
                                 )

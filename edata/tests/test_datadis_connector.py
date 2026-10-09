@@ -4,6 +4,8 @@ import datetime
 import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
 from edata.providers.datadis import DatadisConnector
 
 MOCK_USERNAME = "USERNAME"
@@ -347,3 +349,26 @@ def test_get_supplies_optional_fields_none(mock_token, mock_get, snapshot):
     mock_get.return_value.__aenter__.return_value = mock_response
     connector = DatadisConnector(MOCK_USERNAME, MOCK_PASSWORD)
     assert connector.get_supplies() == snapshot
+
+
+@pytest.mark.asyncio
+@patch.object(
+    DatadisConnector, "_async_get_token", new_callable=AsyncMock, return_value=True
+)
+async def test_shared_session_is_reused(mock_token, tmp_path, snapshot):
+    """A caller-provided session serves the requests and is left open."""
+    mock_response = MagicMock()
+    mock_response.status = 200
+    mock_response.json = AsyncMock(return_value=SUPPLIES_RESPONSE)
+    session = MagicMock()
+    session.get.return_value.__aenter__.return_value = mock_response
+    session.close = AsyncMock()
+
+    connector = DatadisConnector(
+        MOCK_USERNAME, MOCK_PASSWORD, storage_path=str(tmp_path), session=session
+    )
+    supplies = await connector.async_get_supplies()
+
+    assert supplies == snapshot
+    session.get.assert_called_once()
+    session.close.assert_not_awaited()

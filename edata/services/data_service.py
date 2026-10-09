@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from tempfile import gettempdir
 
+import aiohttp
 from dateutil import relativedelta
 
 from edata.core.completion import PendingLedger, is_day_final, is_month_final
@@ -37,12 +38,13 @@ class DataService:
         datadis_pwd: str,
         storage_path: str,
         datadis_authorized_nif: str | None = None,
+        session: aiohttp.ClientSession | None = None,
     ) -> None:
 
         self.datadis = DatadisConnector(
-            datadis_user, datadis_pwd, storage_path=storage_path
+            datadis_user, datadis_pwd, storage_path=storage_path, session=session
         )
-        self.redata = REDataConnector()
+        self.redata = REDataConnector(session=session)
 
         # params
         self._cups = cups
