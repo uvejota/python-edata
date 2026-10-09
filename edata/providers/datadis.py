@@ -12,6 +12,7 @@ from datetime import datetime, timedelta
 
 import aiohttp
 import diskcache
+from dateutil.relativedelta import relativedelta
 
 from edata.models import Contract, Energy, Power, Supply
 
@@ -57,6 +58,9 @@ GET_MAX_POWER_MANDATORY_FIELDS = ["time", "date", "maxPower"]
 # Timing constants
 TIMEOUT = 3 * 60  # requests timeout
 QUERY_LIMIT = timedelta(hours=24)  # a datadis limitation, again...
+# Datadis rejects (400) any query starting more than two years ago, which made
+# a first sync of an older supply fail as a whole
+MAX_HISTORY = relativedelta(years=2)
 
 
 # Cache-related constants
@@ -68,6 +72,18 @@ def migrate_storage(storage_dir: str) -> None:
     with contextlib.suppress(FileNotFoundError):
         os.remove(os.path.join(storage_dir, "edata_recent_queries.json"))
         os.remove(os.path.join(storage_dir, "edata_recent_queries_cache.json"))
+
+
+def earliest_query_start(now: datetime | None = None) -> datetime:
+    """Return the oldest start date Datadis accepts.
+
+    Queries are monthly (``YYYY/MM``), so this is the first month whose first
+    day is still within ``MAX_HISTORY`` of ``now``.
+    """
+
+    limit = (now or datetime.now()) - MAX_HISTORY
+    month = limit.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    return month if month >= limit else month + relativedelta(months=1)
 
 
 def _parse_consumptions(
@@ -463,6 +479,10 @@ class DatadisConnector:
         authorized_nif: str | None = None,
     ) -> list[Energy]:
         """Datadis 'get_consumption_data' query."""
+        start_date = max(start_date, earliest_query_start())
+        if start_date > end_date:
+            _LOGGER.debug("Skipping consumption query older than Datadis history")
+            return []
         data = {
             "cups": cups,
             "distributorCode": distributor_code,
@@ -514,6 +534,10 @@ class DatadisConnector:
         authorized_nif: str | None = None,
     ) -> list[Power]:
         """Datadis 'get_max_power' query."""
+        start_date = max(start_date, earliest_query_start())
+        if start_date > end_date:
+            _LOGGER.debug("Skipping max power query older than Datadis history")
+            return []
         data = {
             "cups": cups,
             "distributorCode": distributor_code,
