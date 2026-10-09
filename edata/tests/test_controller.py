@@ -6,6 +6,8 @@ from datetime import datetime, timedelta
 
 import pytest
 import pytest_asyncio
+from sqlalchemy import DateTime
+from sqlmodel import SQLModel
 
 from edata.database.controller import EdataDB
 from edata.models import Bill, Energy, Supply
@@ -106,3 +108,16 @@ async def test_concurrent_first_calls_do_not_race_index_creation(db: EdataDB) ->
             "SELECT name FROM sqlite_master WHERE name='ix_energy_cups_datetime'"
         )
         assert result.first() is not None
+
+
+def test_datetime_columns_are_naive() -> None:
+    # the supply timezone is unknown, so datetimes are stored as-is (naive);
+    # plain ``datetime`` fields map to UTC-aware columns on sqlmodel>=0.0.45
+    columns = [
+        column
+        for table in SQLModel.metadata.sorted_tables
+        for column in table.columns
+        if isinstance(column.type, DateTime)
+    ]
+    assert len(columns) == 20
+    assert all(column.type.timezone is False for column in columns)
