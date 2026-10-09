@@ -7,7 +7,17 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from edata.providers.datadis import DatadisConnector
+from edata.providers.datadis import DatadisConnector, earliest_query_start
+
+
+@pytest.fixture(autouse=True)
+def _fixture_data_within_history():
+    """Keep the 2022 fixture data inside Datadis's two-year query window."""
+    with patch(
+        "edata.providers.datadis.earliest_query_start",
+        return_value=datetime.datetime(2020, 1, 1),
+    ):
+        yield
 
 
 def _json_body(payload) -> AsyncMock:
@@ -377,3 +387,93 @@ async def test_shared_session_is_reused(mock_token, tmp_path, snapshot):
     assert supplies == snapshot
     session.get.assert_called_once()
     session.close.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    ("now", "expected"),
+    [
+        # 2024-10-01 is already more than two years before the 9th
+        (datetime.datetime(2026, 10, 9, 18, 0), datetime.datetime(2024, 11, 1)),
+        (datetime.datetime(2026, 10, 1, 0, 0), datetime.datetime(2024, 10, 1)),
+        (datetime.datetime(2026, 3, 1, 0, 0, 1), datetime.datetime(2024, 4, 1)),
+    ],
+)
+def test_earliest_query_start(now, expected):
+    """The oldest accepted start is the first month fully within two years."""
+    assert earliest_query_start(now) == expected
+
+
+@patch("aiohttp.ClientSession.get")
+@patch.object(
+    DatadisConnector, "_async_get_token", new_callable=AsyncMock, return_value=True
+)
+def test_queries_are_clamped_to_datadis_history(mock_token, mock_get, tmp_path):
+    """Older start dates are moved to the oldest month Datadis accepts."""
+    mock_response = MagicMock()
+    mock_response.status = 200
+    mock_response.read = _json_body({"timeCurve": [], "maxPower": []})
+    mock_get.return_value.__aenter__.return_value = mock_response
+    connector = DatadisConnector(
+        MOCK_USERNAME, MOCK_PASSWORD, storage_path=str(tmp_path)
+    )
+
+    with patch(
+        "edata.providers.datadis.earliest_query_start",
+        return_value=datetime.datetime(2022, 10, 1),
+    ):
+        connector.get_consumption_data(
+            "ESXXXXXXXXXXXXXXXXTEST",
+            "2",
+            datetime.datetime(2019, 1, 1),
+            datetime.datetime(2022, 10, 31),
+            "0",
+            5,
+        )
+        connector.get_max_power(
+            "ESXXXXXXXXXXXXXXXXTEST",
+            "2",
+            datetime.datetime(2019, 1, 1),
+            datetime.datetime(2022, 10, 31),
+        )
+
+    urls = [call.args[0] for call in mock_get.call_args_list]
+    assert len(urls) == 2
+    assert all("startDate=2022/10&" in url for url in urls)
+
+
+@patch("aiohttp.ClientSession.get")
+@patch.object(
+    DatadisConnector, "_async_get_token", new_callable=AsyncMock, return_value=True
+)
+def test_queries_entirely_before_history_are_skipped(mock_token, mock_get, tmp_path):
+    """A range Datadis no longer serves is not requested at all."""
+    connector = DatadisConnector(
+        MOCK_USERNAME, MOCK_PASSWORD, storage_path=str(tmp_path)
+    )
+
+    with patch(
+        "edata.providers.datadis.earliest_query_start",
+        return_value=datetime.datetime(2022, 10, 1),
+    ):
+        assert (
+            connector.get_consumption_data(
+                "ESXXXXXXXXXXXXXXXXTEST",
+                "2",
+                datetime.datetime(2019, 1, 1),
+                datetime.datetime(2019, 12, 31),
+                "0",
+                5,
+            )
+            == []
+        )
+        assert (
+            connector.get_max_power(
+                "ESXXXXXXXXXXXXXXXXTEST",
+                "2",
+                datetime.datetime(2019, 1, 1),
+                datetime.datetime(2019, 12, 31),
+            )
+            == []
+        )
+
+    mock_get.assert_not_called()
