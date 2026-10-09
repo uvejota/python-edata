@@ -15,25 +15,17 @@ from edata.services.data_service import DataService
 CUPS = "ESXXXXXXXXXXXXXXXXTEST"
 
 
-def _reset_singleton() -> None:
-    EdataDB._instance = None
-    EdataDB._engine = None
-    EdataDB._db_url = None
-
-
 @pytest_asyncio.fixture
 async def data_service(tmp_path) -> AsyncIterator[DataService]:
     """A DataService on an isolated on-disk database, singleton reset around it."""
-    _reset_singleton()
+    EdataDB.reset()
     with (
         patch("edata.services.data_service.DatadisConnector"),
         patch("edata.services.data_service.REDataConnector"),
     ):
         service = DataService(CUPS, "user", "pwd", storage_path=str(tmp_path))
     yield service
-    if EdataDB._engine is not None:
-        EdataDB._engine.dispose()
-    _reset_singleton()
+    EdataDB.reset()
 
 
 def _hourly_energy(start: datetime, end: datetime) -> list[Energy]:

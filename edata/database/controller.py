@@ -124,6 +124,22 @@ class EdataDB:
             raise ValueError("EdataDB already initialized with a different db_url")
         return cls._instance
 
+    @classmethod
+    def reset(cls) -> None:
+        """Close the shared instance (its DB thread and engine) and forget it.
+
+        Waits for queued database work to finish first. A later ``EdataDB(...)``
+        starts afresh, possibly on another path.
+        """
+
+        if cls._instance is not None:
+            cls._instance._executor.shutdown(wait=True)
+        if cls._engine is not None:
+            cls._engine.dispose()
+        cls._instance = None
+        cls._engine = None
+        cls._db_url = None
+
     @property
     def engine(self) -> Engine | None:
         """Return the database engine."""
