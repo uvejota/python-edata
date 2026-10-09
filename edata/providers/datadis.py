@@ -3,6 +3,7 @@
 import asyncio
 import contextlib
 import hashlib
+import json
 import logging
 import os
 import tempfile
@@ -67,6 +68,59 @@ def migrate_storage(storage_dir: str) -> None:
     with contextlib.suppress(FileNotFoundError):
         os.remove(os.path.join(storage_dir, "edata_recent_queries.json"))
         os.remove(os.path.join(storage_dir, "edata_recent_queries_cache.json"))
+
+
+def _parse_consumptions(
+    response: dict[str, typing.Any], start_date: datetime, end_date: datetime
+) -> list[Energy]:
+    """Build the energy records of a 'get_consumption_data' response."""
+
+    consumptions = []
+    for i in response.get("timeCurve", []):
+        if "consumptionKWh" in i:
+            if all(k in i for k in GET_CONSUMPTION_DATA_MANDATORY_FIELDS):
+                raw_hour = int(i["time"].split(":")[0])
+                # Datadis delivers hours 1..24 (end-of-interval). A sporadic
+                # i-DE glitch emits an extra "00:00" row on a day already
+                # carrying its full 24 hours, so drop it -- 01:00..24:00
+                # already covers the day -- instead of remapping onto 23:00
+                # and overlapping that day's 24:00 slot.
+                if raw_hour == 0:
+                    continue
+                date_as_dt = datetime.strptime(
+                    i["date"], "%Y/%m/%d"
+                ) + timedelta(hours=raw_hour - 1)
+                if not (start_date <= date_as_dt <= end_date):
+                    continue  # skip element if dt is out of range
+
+                # sanitize these values
+                _surplus_kwh = i.get("surplusEnergyKWh", 0)
+                if _surplus_kwh is None:
+                    _surplus_kwh = 0
+                _generation_kwh = i.get("generationEnergyKWh", 0)
+                if _generation_kwh is None:
+                    _generation_kwh = 0
+                _selfconsumption_kwh = i.get("selfConsumptionEnergyKWh", 0)
+                if _selfconsumption_kwh is None:
+                    _selfconsumption_kwh = 0
+
+                consumptions.append(
+                    Energy(
+                        datetime=date_as_dt,
+                        delta_h=1,
+                        consumption_kwh=i["consumptionKWh"],
+                        surplus_kwh=_surplus_kwh,
+                        generation_kwh=_generation_kwh,
+                        selfconsumption_kwh=_selfconsumption_kwh,
+                        real=i["obtainMethod"] == "Real",
+                    )
+                )
+            else:
+                _LOGGER.warning(
+                    "Weird data structure while fetching consumption data, got %s",
+                    response,
+                )
+    return consumptions
 
 
 class DatadisConnector:
@@ -237,7 +291,10 @@ class DatadisConnector:
                         # it here as well would decode every (large) payload twice
                         if reply.status == 200:
                             try:
-                                json_data = await reply.json(content_type=None)
+                                # decode off the event loop: a full-history
+                                # response is several MB of JSON
+                                body = await reply.read()
+                                json_data = await asyncio.to_thread(json.loads, body)
                                 if json_data:
                                     response = json_data
                                     if not ignore_cache:
@@ -419,52 +476,11 @@ class DatadisConnector:
 
         response = await self._async_get(URL_GET_CONSUMPTION_DATA, request_data=data)
 
-        consumptions = []
-        for i in response.get("timeCurve", []):
-            if "consumptionKWh" in i:
-                if all(k in i for k in GET_CONSUMPTION_DATA_MANDATORY_FIELDS):
-                    raw_hour = int(i["time"].split(":")[0])
-                    # Datadis delivers hours 1..24 (end-of-interval). A sporadic
-                    # i-DE glitch emits an extra "00:00" row on a day already
-                    # carrying its full 24 hours, so drop it -- 01:00..24:00
-                    # already covers the day -- instead of remapping onto 23:00
-                    # and overlapping that day's 24:00 slot.
-                    if raw_hour == 0:
-                        continue
-                    date_as_dt = datetime.strptime(
-                        i["date"], "%Y/%m/%d"
-                    ) + timedelta(hours=raw_hour - 1)
-                    if not (start_date <= date_as_dt <= end_date):
-                        continue  # skip element if dt is out of range
-
-                    # sanitize these values
-                    _surplus_kwh = i.get("surplusEnergyKWh", 0)
-                    if _surplus_kwh is None:
-                        _surplus_kwh = 0
-                    _generation_kwh = i.get("generationEnergyKWh", 0)
-                    if _generation_kwh is None:
-                        _generation_kwh = 0
-                    _selfconsumption_kwh = i.get("selfConsumptionEnergyKWh", 0)
-                    if _selfconsumption_kwh is None:
-                        _selfconsumption_kwh = 0
-
-                    consumptions.append(
-                        Energy(
-                            datetime=date_as_dt,
-                            delta_h=1,
-                            consumption_kwh=i["consumptionKWh"],
-                            surplus_kwh=_surplus_kwh,
-                            generation_kwh=_generation_kwh,
-                            selfconsumption_kwh=_selfconsumption_kwh,
-                            real=i["obtainMethod"] == "Real",
-                        )
-                    )
-                else:
-                    _LOGGER.warning(
-                        "Weird data structure while fetching consumption data, got %s",
-                        response,
-                    )
-        return consumptions
+        # building tens of thousands of records on a first import takes long
+        # enough to stall the event loop, so parse in a worker thread
+        return await asyncio.to_thread(
+            _parse_consumptions, response, start_date, end_date
+        )
 
     def get_consumption_data(
         self,

@@ -1,15 +1,15 @@
 import asyncio
+import functools
 import logging
 import os
 import typing
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
-from sqlalchemy import Select, Table, event, insert, or_
+from sqlalchemy import Engine, Select, Table, create_engine, event, insert, or_
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
-from sqlmodel import SQLModel, UniqueConstraint
-from sqlmodel.ext.asyncio.session import AsyncSession
+from sqlmodel import Session, SQLModel, UniqueConstraint
 from sqlmodel.sql.expression import SelectOfScalar
 
 import edata.database.queries as q
@@ -28,6 +28,7 @@ from edata.models.bill import Bill, EnergyPrice
 _LOGGER = logging.getLogger(__name__)
 
 T = typing.TypeVar("T", bound=SQLModel)
+R = typing.TypeVar("R")
 
 
 def _set_sqlite_pragmas(dbapi_connection, connection_record) -> None:
@@ -77,53 +78,91 @@ def _conflict_columns(table: Table) -> list[str]:
     return [c.name for c in table.primary_key.columns]
 
 
+def _in_db_thread(
+    fn: typing.Callable[..., R],
+) -> typing.Callable[..., typing.Coroutine[typing.Any, typing.Any, R]]:
+    """Turn a blocking ``EdataDB`` method into a coroutine run on its DB thread."""
+
+    @functools.wraps(fn)
+    async def wrapper(self: "EdataDB", *args: typing.Any, **kwargs: typing.Any) -> R:
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(
+            self._executor, functools.partial(fn, self, *args, **kwargs)
+        )
+
+    return wrapper
+
+
 class EdataDB:
+    """SQLite store.
+
+    The public API is async, but every database operation (SQLAlchemy, pydantic
+    (de)serialization and SQLite itself) runs on a single dedicated thread so a
+    large import never stalls the caller's event loop (e.g. Home Assistant's).
+    One thread also serializes access, which suits SQLite's single writer.
+    """
 
     _instance = None
-    _engine: AsyncEngine | None = None
+    _engine: Engine | None = None
     _db_url: str | None = None
 
     def __new__(cls, sqlite_path: str):
-        db_url = f"sqlite+aiosqlite:////{os.path.abspath(sqlite_path)}"
+        db_url = f"sqlite:////{os.path.abspath(sqlite_path)}"
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             cls._db_url = db_url
             # Ensure parent directory exists before the first connection is opened.
             dir_path = os.path.dirname(os.path.abspath(sqlite_path))
             os.makedirs(dir_path, exist_ok=True)
-            cls._engine = create_async_engine(db_url, future=True)
-            event.listen(cls._engine.sync_engine, "connect", _set_sqlite_pragmas)
+            cls._engine = create_engine(db_url)
+            event.listen(cls._engine, "connect", _set_sqlite_pragmas)
             cls._instance._tables_initialized = False
-            cls._instance._tables_lock = asyncio.Lock()
+            cls._instance._executor = ThreadPoolExecutor(
+                max_workers=1, thread_name_prefix="edata-db"
+            )
         elif db_url != cls._db_url:
             raise ValueError("EdataDB already initialized with a different db_url")
         return cls._instance
 
+    @classmethod
+    def reset(cls) -> None:
+        """Close the shared instance (its DB thread and engine) and forget it.
+
+        Waits for queued database work to finish first. A later ``EdataDB(...)``
+        starts afresh, possibly on another path.
+        """
+
+        if cls._instance is not None:
+            cls._instance._executor.shutdown(wait=True)
+        if cls._engine is not None:
+            cls._engine.dispose()
+        cls._instance = None
+        cls._engine = None
+        cls._db_url = None
+
     @property
-    def engine(self) -> AsyncEngine | None:
-        """Return the async database engine."""
+    def engine(self) -> Engine | None:
+        """Return the database engine."""
 
         return self._engine
 
-    async def _ensure_tables(self) -> None:
-        """Create tables if not already created (lazy init)."""
+    def _ensure_tables(self) -> None:
+        """Create tables and missing indexes if not already done (lazy init).
 
-        if self._tables_initialized:
+        Only ever runs on the database thread, so concurrent first calls are
+        serialized and cannot race to create the same index.
+        """
+
+        if self._tables_initialized or not self.engine:
             return
-        # concurrent first calls (e.g. several websocket requests right after
-        # startup) would otherwise all see the index missing and race to create
-        # it, failing with "index ... already exists"
-        async with self._tables_lock:
-            if self._tables_initialized or not self.engine:
-                return
-            async with self.engine.begin() as conn:
-                await conn.run_sync(SQLModel.metadata.create_all)
-                await conn.run_sync(_create_missing_indexes)
-            self._tables_initialized = True
+        with self.engine.begin() as conn:
+            SQLModel.metadata.create_all(conn)
+            _create_missing_indexes(conn)
+        self._tables_initialized = True
 
-    async def _add_one(
+    def _add_one(
         self,
-        session: AsyncSession,
+        session: Session,
         record: T,
         commit: bool = True,
     ) -> T:
@@ -131,15 +170,15 @@ class EdataDB:
 
         session.add(record)
         if commit:
-            await session.commit()
-            await session.refresh(record)
+            session.commit()
+            session.refresh(record)
         else:
-            await session.flush()
+            session.flush()
         return record
 
-    async def _update_one(
+    def _update_one(
         self,
-        session: AsyncSession,
+        session: Session,
         query: SelectOfScalar,
         data: typing.Any,
         commit: bool = True,
@@ -147,7 +186,7 @@ class EdataDB:
     ) -> T | None:  # type: ignore
         """Update a single record in the database."""
 
-        result = await session.exec(query)
+        result = session.exec(query)
         existing = result.first()
         if existing and getattr(existing, "data") == data and not overrides:
             return existing
@@ -156,15 +195,15 @@ class EdataDB:
             for key, value in overrides.items():
                 setattr(existing, key, value)
         if commit:
-            await session.commit()
-            await session.refresh(existing)
+            session.commit()
+            session.refresh(existing)
         else:
-            await session.flush()
+            session.flush()
         return existing
 
-    async def _add_or_update_one(
+    def _add_or_update_one(
         self,
-        session: AsyncSession,
+        session: Session,
         query: SelectOfScalar,
         record: T,
         commit: bool = True,
@@ -173,12 +212,12 @@ class EdataDB:
         """Add a single record into the database and fallback to update safely."""
 
         try:
-            async with session.begin_nested():
+            with session.begin_nested():
                 session.add(record)
-                await session.flush()
+                session.flush()
             if commit:
-                await session.commit()
-                await session.refresh(record)
+                session.commit()
+                session.refresh(record)
             return record
         except IntegrityError:
             new_data = getattr(record, "data")
@@ -188,13 +227,13 @@ class EdataDB:
                 override_dict = {
                     x: record_json[x] for x in record.model_dump() if x in override
                 }
-            return await self._update_one(
+            return self._update_one(
                 session, query, new_data, commit=commit, overrides=override_dict
             )
 
-    async def _add_or_update_many(
+    def _add_or_update_many(
         self,
-        session: AsyncSession,
+        session: Session,
         model: type[SQLModel],
         rows: list[dict[str, typing.Any]],
         override: list[str] | None = None,
@@ -232,166 +271,183 @@ class EdataDB:
             },
             where=or_(*(table.c[c].is_distinct_from(stmt.excluded[c]) for c in updated)),
         )
-        connection = await session.connection()
-        await connection.execute(stmt, rows)
-        await session.commit()
+        connection = session.connection()
+        connection.execute(stmt, rows)
+        session.commit()
 
-    async def get_supply(self, cups: str) -> SupplyModel | None:
+    @_in_db_thread
+    def get_supply(self, cups: str) -> SupplyModel | None:
         """Get a supply record by cups."""
 
-        await self._ensure_tables()
-        async with AsyncSession(self.engine) as session:
-            result = await session.exec(q.get_supply(cups))
+        self._ensure_tables()
+        with Session(self.engine) as session:
+            result = session.exec(q.get_supply(cups))
             return result.first()
 
-    async def get_contract(
+    @_in_db_thread
+    def get_contract(
         self, cups: str, date_start: datetime | None = None
     ) -> ContractModel | None:
         """Get a contract record by cups."""
 
-        await self._ensure_tables()
-        async with AsyncSession(self.engine) as session:
-            result = await session.exec(q.get_contract(cups, date_start))
+        self._ensure_tables()
+        with Session(self.engine) as session:
+            result = session.exec(q.get_contract(cups, date_start))
             return result.first()
 
-    async def get_last_energy(self, cups: str) -> EnergyModel | None:
+    @_in_db_thread
+    def get_last_energy(self, cups: str) -> EnergyModel | None:
         """Get the most recent Energy record by cups."""
 
-        await self._ensure_tables()
-        async with AsyncSession(self.engine) as session:
-            result = await session.exec(q.get_last_energy(cups))
+        self._ensure_tables()
+        with Session(self.engine) as session:
+            result = session.exec(q.get_last_energy(cups))
             return result.first()
 
-    async def get_last_power(self, cups: str) -> PowerModel | None:
+    @_in_db_thread
+    def get_last_power(self, cups: str) -> PowerModel | None:
         """Get the most recent power record by cups."""
 
-        await self._ensure_tables()
-        async with AsyncSession(self.engine) as session:
-            result = await session.exec(q.get_last_power(cups))
+        self._ensure_tables()
+        with Session(self.engine) as session:
+            result = session.exec(q.get_last_power(cups))
             return result.first()
 
-    async def get_last_pvpc(self) -> PVPCModel | None:
+    @_in_db_thread
+    def get_last_pvpc(self) -> PVPCModel | None:
         """Get the most recent pvpc."""
 
-        await self._ensure_tables()
-        async with AsyncSession(self.engine) as session:
-            result = await session.exec(q.get_last_pvpc())
+        self._ensure_tables()
+        with Session(self.engine) as session:
+            result = session.exec(q.get_last_pvpc())
             return result.first()
 
-    async def get_last_bill(self, cups: str) -> BillModel | None:
+    @_in_db_thread
+    def get_last_bill(self, cups: str) -> BillModel | None:
         """Get the most recent bill record by cups."""
 
-        await self._ensure_tables()
-        async with AsyncSession(self.engine) as session:
-            result = await session.exec(q.get_last_bill(cups))
+        self._ensure_tables()
+        with Session(self.engine) as session:
+            result = session.exec(q.get_last_bill(cups))
             return result.first()
 
-    async def get_last_complete_statistic(
+    @_in_db_thread
+    def get_last_complete_statistic(
         self, cups: str, type_: typing.Literal["day", "month"]
     ) -> StatisticsModel | None:
         """Get the most recent complete statistics record by cups and type."""
 
-        await self._ensure_tables()
-        async with AsyncSession(self.engine) as session:
-            result = await session.exec(q.get_last_complete_statistic(cups, type_))
+        self._ensure_tables()
+        with Session(self.engine) as session:
+            result = session.exec(q.get_last_complete_statistic(cups, type_))
             return result.first()
 
-    async def get_last_complete_bill(
+    @_in_db_thread
+    def get_last_complete_bill(
         self, cups: str, type_: typing.Literal["hour", "day", "month"]
     ) -> BillModel | None:
         """Get the most recent complete bill record by cups and type."""
 
-        await self._ensure_tables()
-        async with AsyncSession(self.engine) as session:
-            result = await session.exec(q.get_last_complete_bill(cups, type_))
+        self._ensure_tables()
+        with Session(self.engine) as session:
+            result = session.exec(q.get_last_complete_bill(cups, type_))
             return result.first()
 
-    async def add_contract(self, cups: str, contract: Contract) -> ContractModel | None:
+    @_in_db_thread
+    def add_contract(self, cups: str, contract: Contract) -> ContractModel | None:
         """Add or update a contract record."""
 
-        await self._ensure_tables()
+        self._ensure_tables()
         record = ContractModel(cups=cups, date_start=contract.date_start, data=contract)
-        async with AsyncSession(self.engine) as session:
-            return await self._add_or_update_one(
+        with Session(self.engine) as session:
+            return self._add_or_update_one(
                 session, q.get_contract(cups, contract.date_start), record
             )
 
-    async def add_supply(self, supply: Supply) -> SupplyModel | None:
+    @_in_db_thread
+    def add_supply(self, supply: Supply) -> SupplyModel | None:
         """Add or update a supply record."""
 
-        await self._ensure_tables()
+        self._ensure_tables()
         record = SupplyModel(cups=supply.cups, data=supply)
-        async with AsyncSession(self.engine) as session:
-            return await self._add_or_update_one(
+        with Session(self.engine) as session:
+            return self._add_or_update_one(
                 session, q.get_supply(supply.cups), record
             )
 
-    async def add_energy(self, cups: str, energy: Energy) -> EnergyModel | None:
+    @_in_db_thread
+    def add_energy(self, cups: str, energy: Energy) -> EnergyModel | None:
         """Add or update an energy record."""
 
-        await self._ensure_tables()
+        self._ensure_tables()
         record = EnergyModel(
             cups=cups, delta_h=energy.delta_h, datetime=energy.datetime, data=energy
         )
-        async with AsyncSession(self.engine) as session:
-            return await self._add_or_update_one(
+        with Session(self.engine) as session:
+            return self._add_or_update_one(
                 session, q.get_energy(cups, energy.datetime), record
             )
 
-    async def add_energy_list(self, cups: str, energy: list[Energy]) -> None:
+    @_in_db_thread
+    def add_energy_list(self, cups: str, energy: list[Energy]) -> None:
         """Add or update a list of energy records."""
 
-        await self._ensure_tables()
-        async with AsyncSession(self.engine) as session:
+        self._ensure_tables()
+        with Session(self.engine) as session:
             unique_map = {item.datetime: item for item in energy}
             unique = list(unique_map.values())
             rows = [
                 {"cups": cups, "delta_h": x.delta_h, "datetime": x.datetime, "data": x}
                 for x in unique
             ]
-            await self._add_or_update_many(session, EnergyModel, rows)
+            self._add_or_update_many(session, EnergyModel, rows)
 
-    async def add_power(self, cups: str, power: Power) -> PowerModel | None:
+    @_in_db_thread
+    def add_power(self, cups: str, power: Power) -> PowerModel | None:
         """Add or update a power record for a given CUPS and Power instance."""
 
-        await self._ensure_tables()
+        self._ensure_tables()
         record = PowerModel(cups=cups, datetime=power.datetime, data=power)
-        async with AsyncSession(self.engine) as session:
-            return await self._add_or_update_one(
+        with Session(self.engine) as session:
+            return self._add_or_update_one(
                 session, q.get_power(cups, power.datetime), record
             )
 
-    async def add_power_list(self, cups: str, power: list[Power]) -> None:
+    @_in_db_thread
+    def add_power_list(self, cups: str, power: list[Power]) -> None:
         """Add or update a list of power records."""
 
-        await self._ensure_tables()
-        async with AsyncSession(self.engine) as session:
+        self._ensure_tables()
+        with Session(self.engine) as session:
             unique_map = {item.datetime: item for item in power}
             unique = list(unique_map.values())
             rows = [{"cups": cups, "datetime": x.datetime, "data": x} for x in unique]
-            await self._add_or_update_many(session, PowerModel, rows)
+            self._add_or_update_many(session, PowerModel, rows)
 
-    async def add_pvpc(self, pvpc: EnergyPrice) -> PVPCModel | None:
+    @_in_db_thread
+    def add_pvpc(self, pvpc: EnergyPrice) -> PVPCModel | None:
         """Add or update a pvpc record."""
 
-        await self._ensure_tables()
+        self._ensure_tables()
         record = PVPCModel(datetime=pvpc.datetime, data=pvpc)
-        async with AsyncSession(self.engine) as session:
-            return await self._add_or_update_one(
+        with Session(self.engine) as session:
+            return self._add_or_update_one(
                 session, q.get_pvpc(pvpc.datetime), record
             )
 
-    async def add_pvpc_list(self, pvpc: list[EnergyPrice]) -> None:
+    @_in_db_thread
+    def add_pvpc_list(self, pvpc: list[EnergyPrice]) -> None:
         """Add or update a list of pvpc records."""
 
-        await self._ensure_tables()
-        async with AsyncSession(self.engine) as session:
+        self._ensure_tables()
+        with Session(self.engine) as session:
             unique_map = {item.datetime: item for item in pvpc}
             unique = list(unique_map.values())
             rows = [{"datetime": x.datetime, "data": x} for x in unique]
-            await self._add_or_update_many(session, PVPCModel, rows)
+            self._add_or_update_many(session, PVPCModel, rows)
 
-    async def add_statistics(
+    @_in_db_thread
+    def add_statistics(
         self,
         cups: str,
         type_: typing.Literal["day", "month"],
@@ -400,19 +456,20 @@ class EdataDB:
     ) -> StatisticsModel | None:
         """Add or update a statistics record."""
 
-        await self._ensure_tables()
+        self._ensure_tables()
         record = StatisticsModel(
             cups=cups, datetime=data.datetime, type=type_, data=data, complete=complete
         )
-        async with AsyncSession(self.engine) as session:
-            return await self._add_or_update_one(
+        with Session(self.engine) as session:
+            return self._add_or_update_one(
                 session,
                 q.get_statistics(cups, type_, data.datetime),
                 record,
                 override=["complete"],
             )
 
-    async def add_statistics_list(
+    @_in_db_thread
+    def add_statistics_list(
         self,
         cups: str,
         type_: typing.Literal["day", "month"],
@@ -421,8 +478,8 @@ class EdataDB:
     ) -> None:
         """Add or update a list of statistics records."""
 
-        await self._ensure_tables()
-        async with AsyncSession(self.engine) as session:
+        self._ensure_tables()
+        with Session(self.engine) as session:
             unique_map = {item.datetime: item for item in statistics}
             rows = [
                 {
@@ -434,11 +491,12 @@ class EdataDB:
                 }
                 for x in unique_map.values()
             ]
-            await self._add_or_update_many(
+            self._add_or_update_many(
                 session, StatisticsModel, rows, override=["complete"]
             )
 
-    async def add_bill(
+    @_in_db_thread
+    def add_bill(
         self,
         cups: str,
         type_: typing.Literal["hour", "day", "month"],
@@ -448,7 +506,7 @@ class EdataDB:
     ) -> BillModel | None:
         """Add or update a bill record."""
 
-        await self._ensure_tables()
+        self._ensure_tables()
         record = BillModel(
             cups=cups,
             datetime=data.datetime,
@@ -457,15 +515,16 @@ class EdataDB:
             confhash=confhash,
             data=data,
         )
-        async with AsyncSession(self.engine) as session:
-            return await self._add_or_update_one(
+        with Session(self.engine) as session:
+            return self._add_or_update_one(
                 session,
                 q.get_bill(cups, type_, data.datetime),
                 record,
                 override=["complete", "confhash"],
             )
 
-    async def add_bill_list(
+    @_in_db_thread
+    def add_bill_list(
         self,
         cups: str,
         type_: typing.Literal["hour", "day", "month"],
@@ -475,8 +534,8 @@ class EdataDB:
     ) -> None:
         """Add or update a list of bill records."""
 
-        await self._ensure_tables()
-        async with AsyncSession(self.engine) as session:
+        self._ensure_tables()
+        with Session(self.engine) as session:
             unique_map = {item.datetime: item for item in bill}
             unique = list(unique_map.values())
             rows = [
@@ -490,51 +549,55 @@ class EdataDB:
                 }
                 for x in unique
             ]
-            await self._add_or_update_many(
+            self._add_or_update_many(
                 session, BillModel, rows, override=["complete", "confhash"]
             )
 
-    async def clear_bills(self, cups: str, since: datetime | None = None) -> None:
+    @_in_db_thread
+    def clear_bills(self, cups: str, since: datetime | None = None) -> None:
         """Delete bill records for a cups, optionally only from a datetime onwards."""
 
-        await self._ensure_tables()
-        async with AsyncSession(self.engine) as session:
-            await session.exec(q.delete_bill(cups, since))  # type: ignore[call-overload]
-            await session.commit()
+        self._ensure_tables()
+        with Session(self.engine) as session:
+            session.exec(q.delete_bill(cups, since))  # type: ignore[call-overload]
+            session.commit()
 
-    async def list_supplies(self) -> typing.Sequence[SupplyModel]:
+    @_in_db_thread
+    def list_supplies(self) -> typing.Sequence[SupplyModel]:
         """List all supply records."""
 
-        await self._ensure_tables()
-        async with AsyncSession(self.engine) as session:
-            result = await session.exec(q.list_supply())
+        self._ensure_tables()
+        with Session(self.engine) as session:
+            result = session.exec(q.list_supply())
             return result.all()
 
-    async def list_contracts(
+    @_in_db_thread
+    def list_contracts(
         self, cups: str | None = None
     ) -> typing.Sequence[ContractModel]:
         """List all contract records."""
 
-        await self._ensure_tables()
-        async with AsyncSession(self.engine) as session:
-            result = await session.exec(q.list_contract(cups))
+        self._ensure_tables()
+        with Session(self.engine) as session:
+            result = session.exec(q.list_contract(cups))
             return result.all()
 
-    async def _list_data(self, query: SelectOfScalar, model: type[SQLModel]) -> list:
+    def _list_data(self, query: SelectOfScalar, model: type[SQLModel]) -> list:
         """Return only the ``data`` payload of the rows selected by ``query``.
 
         Skips building an ORM instance per row, which nearly halves the cost of
         reading a month of hourly records.
         """
 
-        await self._ensure_tables()
-        async with AsyncSession(self.engine) as session:
-            result = await session.exec(
+        self._ensure_tables()
+        with Session(self.engine) as session:
+            result = session.exec(
                 query.with_only_columns(model.data)  # type: ignore[attr-defined]
             )
             return list(result.all())
 
-    async def list_energy_data(
+    @_in_db_thread
+    def list_energy_data(
         self,
         cups: str,
         date_from: datetime | None = None,
@@ -542,20 +605,22 @@ class EdataDB:
     ) -> list[Energy]:
         """List the energy data (without row metadata)."""
 
-        return await self._list_data(
+        return self._list_data(
             q.list_energy(cups, date_from, date_to), EnergyModel
         )
 
-    async def list_pvpc_data(
+    @_in_db_thread
+    def list_pvpc_data(
         self,
         date_from: datetime | None = None,
         date_to: datetime | None = None,
     ) -> list[EnergyPrice]:
         """List the pvpc data (without row metadata)."""
 
-        return await self._list_data(q.list_pvpc(date_from, date_to), PVPCModel)
+        return self._list_data(q.list_pvpc(date_from, date_to), PVPCModel)
 
-    async def list_bill_data(
+    @_in_db_thread
+    def list_bill_data(
         self,
         cups: str,
         type_: typing.Literal["hour", "day", "month"],
@@ -564,11 +629,12 @@ class EdataDB:
     ) -> list[Bill]:
         """List the bill data (without row metadata)."""
 
-        return await self._list_data(
+        return self._list_data(
             q.list_bill(cups, type_, date_from, date_to), BillModel
         )
 
-    async def list_energy(
+    @_in_db_thread
+    def list_energy(
         self,
         cups: str,
         date_from: datetime | None = None,
@@ -576,12 +642,13 @@ class EdataDB:
     ) -> typing.Sequence[EnergyModel]:
         """List energy records."""
 
-        await self._ensure_tables()
-        async with AsyncSession(self.engine) as session:
-            result = await session.exec(q.list_energy(cups, date_from, date_to))
+        self._ensure_tables()
+        with Session(self.engine) as session:
+            result = session.exec(q.list_energy(cups, date_from, date_to))
             return result.all()
 
-    async def list_power(
+    @_in_db_thread
+    def list_power(
         self,
         cups: str,
         date_from: datetime | None = None,
@@ -589,24 +656,26 @@ class EdataDB:
     ) -> typing.Sequence[PowerModel]:
         """List power records."""
 
-        await self._ensure_tables()
-        async with AsyncSession(self.engine) as session:
-            result = await session.exec(q.list_power(cups, date_from, date_to))
+        self._ensure_tables()
+        with Session(self.engine) as session:
+            result = session.exec(q.list_power(cups, date_from, date_to))
             return result.all()
 
-    async def list_pvpc(
+    @_in_db_thread
+    def list_pvpc(
         self,
         date_from: datetime | None = None,
         date_to: datetime | None = None,
     ) -> typing.Sequence[PVPCModel]:
         """List pvpc records."""
 
-        await self._ensure_tables()
-        async with AsyncSession(self.engine) as session:
-            result = await session.exec(q.list_pvpc(date_from, date_to))
+        self._ensure_tables()
+        with Session(self.engine) as session:
+            result = session.exec(q.list_pvpc(date_from, date_to))
             return result.all()
 
-    async def list_statistics(
+    @_in_db_thread
+    def list_statistics(
         self,
         cups: str,
         type_: typing.Literal["day", "month"],
@@ -616,14 +685,15 @@ class EdataDB:
     ) -> typing.Sequence[StatisticsModel]:
         """List statistics records filtered by type ('day' or 'month') and date range."""
 
-        await self._ensure_tables()
-        async with AsyncSession(self.engine) as session:
-            result = await session.exec(
+        self._ensure_tables()
+        with Session(self.engine) as session:
+            result = session.exec(
                 q.list_statistics(cups, type_, date_from, date_to, complete)
             )
             return result.all()
 
-    async def list_bill(
+    @_in_db_thread
+    def list_bill(
         self,
         cups: str,
         type_: typing.Literal["hour", "day", "month"],
@@ -633,9 +703,9 @@ class EdataDB:
     ) -> typing.Sequence[BillModel]:
         """List bill records filtered by type ('hour', 'day' or 'month') and date range."""
 
-        await self._ensure_tables()
-        async with AsyncSession(self.engine) as session:
-            result = await session.exec(
+        self._ensure_tables()
+        with Session(self.engine) as session:
+            result = session.exec(
                 q.list_bill(cups, type_, date_from, date_to, complete)
             )
             return result.all()

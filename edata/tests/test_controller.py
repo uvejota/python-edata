@@ -1,6 +1,7 @@
 """Tests for the database controller."""
 
 import asyncio
+import threading
 from collections.abc import AsyncIterator
 from datetime import datetime, timedelta
 
@@ -16,16 +17,10 @@ CUPS = "ESXXXXXXXXXXXXXXXXTEST"
 START = datetime(2024, 1, 1)
 
 
-def _reset_singleton() -> None:
-    EdataDB._instance = None
-    EdataDB._engine = None
-    EdataDB._db_url = None
-
-
 @pytest_asyncio.fixture
 async def db(tmp_path) -> AsyncIterator[EdataDB]:
     """An EdataDB on an isolated on-disk database with one supply."""
-    _reset_singleton()
+    EdataDB.reset()
     database = EdataDB(str(tmp_path / "edata.db"))
     await database.add_supply(
         Supply(
@@ -42,9 +37,7 @@ async def db(tmp_path) -> AsyncIterator[EdataDB]:
         )
     )
     yield database
-    if EdataDB._engine is not None:
-        await EdataDB._engine.dispose()
-    _reset_singleton()
+    EdataDB.reset()
 
 
 def _energy(hours: int, kwh: float) -> list[Energy]:
@@ -97,14 +90,14 @@ async def test_add_bill_list_applies_overrides(db: EdataDB) -> None:
 @pytest.mark.asyncio
 async def test_concurrent_first_calls_do_not_race_index_creation(db: EdataDB) -> None:
     # simulate a database created before the index existed, opened fresh
-    async with db.engine.begin() as conn:
-        await conn.exec_driver_sql("DROP INDEX ix_energy_cups_datetime")
+    with db.engine.begin() as conn:
+        conn.exec_driver_sql("DROP INDEX ix_energy_cups_datetime")
     db._tables_initialized = False
 
     await asyncio.gather(*(db.get_last_energy(CUPS) for _ in range(10)))
 
-    async with db.engine.connect() as conn:
-        result = await conn.exec_driver_sql(
+    with db.engine.connect() as conn:
+        result = conn.exec_driver_sql(
             "SELECT name FROM sqlite_master WHERE name='ix_energy_cups_datetime'"
         )
         assert result.first() is not None
@@ -121,3 +114,14 @@ def test_datetime_columns_are_naive() -> None:
     ]
     assert len(columns) == 20
     assert all(column.type.timezone is False for column in columns)
+
+
+@pytest.mark.asyncio
+async def test_reset_stops_db_thread_and_allows_new_path(db: EdataDB, tmp_path) -> None:
+    assert await db.list_supplies()
+    EdataDB.reset()
+
+    assert not any(t.name.startswith("edata-db") for t in threading.enumerate())
+    other = EdataDB(str(tmp_path / "other.db"))
+    assert other is not db
+    assert await other.list_supplies() == []
