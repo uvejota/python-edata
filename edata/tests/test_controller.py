@@ -1,5 +1,6 @@
-"""Bulk upsert tests for the database controller."""
+"""Tests for the database controller."""
 
+import asyncio
 from collections.abc import AsyncIterator
 from datetime import datetime, timedelta
 
@@ -89,3 +90,19 @@ async def test_add_bill_list_applies_overrides(db: EdataDB) -> None:
     stored = await db.list_bill(CUPS, "hour")
     assert len(stored) == 3
     assert all(x.complete and x.confhash == "hash-b" for x in stored)
+
+
+@pytest.mark.asyncio
+async def test_concurrent_first_calls_do_not_race_index_creation(db: EdataDB) -> None:
+    # simulate a database created before the index existed, opened fresh
+    async with db.engine.begin() as conn:
+        await conn.exec_driver_sql("DROP INDEX ix_energy_cups_datetime")
+    db._tables_initialized = False
+
+    await asyncio.gather(*(db.get_last_energy(CUPS) for _ in range(10)))
+
+    async with db.engine.connect() as conn:
+        result = await conn.exec_driver_sql(
+            "SELECT name FROM sqlite_master WHERE name='ix_energy_cups_datetime'"
+        )
+        assert result.first() is not None

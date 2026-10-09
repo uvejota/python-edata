@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 import typing
@@ -93,6 +94,7 @@ class EdataDB:
             cls._engine = create_async_engine(db_url, future=True)
             event.listen(cls._engine.sync_engine, "connect", _set_sqlite_pragmas)
             cls._instance._tables_initialized = False
+            cls._instance._tables_lock = asyncio.Lock()
         elif db_url != cls._db_url:
             raise ValueError("EdataDB already initialized with a different db_url")
         return cls._instance
@@ -108,7 +110,12 @@ class EdataDB:
 
         if self._tables_initialized:
             return
-        if self.engine:
+        # concurrent first calls (e.g. several websocket requests right after
+        # startup) would otherwise all see the index missing and race to create
+        # it, failing with "index ... already exists"
+        async with self._tables_lock:
+            if self._tables_initialized or not self.engine:
+                return
             async with self.engine.begin() as conn:
                 await conn.run_sync(SQLModel.metadata.create_all)
                 await conn.run_sync(_create_missing_indexes)
