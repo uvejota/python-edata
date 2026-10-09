@@ -1,10 +1,21 @@
 import typing
 from datetime import datetime as dt
 
-from sqlmodel import AutoString, Column, Field, SQLModel, UniqueConstraint
+from sqlmodel import AutoString, Column, Field, Index, SQLModel, UniqueConstraint
 
 from edata.database.utils import PydanticJSON
 from edata.models import Bill, Contract, Energy, EnergyPrice, Power, Statistics, Supply
+
+
+def _now() -> dt:
+    """Return the current time.
+
+    A plain Python function on purpose: with the ``dt.now`` builtin as
+    ``default_factory`` pydantic re-inspects its signature on every instance,
+    which made building each row ~6x slower.
+    """
+
+    return dt.now()
 
 
 class SupplyModel(SQLModel, table=True):
@@ -16,9 +27,9 @@ class SupplyModel(SQLModel, table=True):
     cups: str = Field(default=None, primary_key=True)
     data: Supply = Field(sa_column=Column(PydanticJSON(Supply)))
     version: int = Field(default=1)
-    created_at: dt = Field(default_factory=dt.now, nullable=False)
+    created_at: dt = Field(default_factory=_now, nullable=False)
     updated_at: dt = Field(
-        default_factory=dt.now, nullable=False, sa_column_kwargs={"onupdate": dt.now}
+        default_factory=_now, nullable=False, sa_column_kwargs={"onupdate": dt.now}
     )
 
 
@@ -37,9 +48,9 @@ class ContractModel(SQLModel, table=True):
     data: Contract = Field(sa_column=Column(PydanticJSON(Contract)))
 
     version: int = Field(default=1)
-    created_at: dt = Field(default_factory=dt.now, nullable=False)
+    created_at: dt = Field(default_factory=_now, nullable=False)
     updated_at: dt = Field(
-        default_factory=dt.now, nullable=False, sa_column_kwargs={"onupdate": dt.now}
+        default_factory=_now, nullable=False, sa_column_kwargs={"onupdate": dt.now}
     )
 
 
@@ -51,6 +62,9 @@ class EnergyModel(SQLModel, table=True):
         UniqueConstraint(
             "cups", "delta_h", "datetime", name="uq_energy_cups_delta_datetime"
         ),
+        # serves the per-cups range scans and "latest record" lookups without
+        # sorting the whole table
+        Index("ix_energy_cups_datetime", "cups", "datetime"),
         {"extend_existing": True},
     )
 
@@ -62,9 +76,9 @@ class EnergyModel(SQLModel, table=True):
     data: Energy = Field(sa_column=Column(PydanticJSON(Energy)))
 
     version: int = Field(default=1)
-    created_at: dt = Field(default_factory=dt.now, nullable=False)
+    created_at: dt = Field(default_factory=_now, nullable=False)
     updated_at: dt = Field(
-        default_factory=dt.now, nullable=False, sa_column_kwargs={"onupdate": dt.now}
+        default_factory=_now, nullable=False, sa_column_kwargs={"onupdate": dt.now}
     )
 
 
@@ -84,9 +98,9 @@ class PowerModel(SQLModel, table=True):
     data: Power = Field(sa_column=Column(PydanticJSON(Power)))
 
     version: int = Field(default=1)
-    created_at: dt = Field(default_factory=dt.now, nullable=False)
+    created_at: dt = Field(default_factory=_now, nullable=False)
     updated_at: dt = Field(
-        default_factory=dt.now, nullable=False, sa_column_kwargs={"onupdate": dt.now}
+        default_factory=_now, nullable=False, sa_column_kwargs={"onupdate": dt.now}
     )
 
 
@@ -112,9 +126,9 @@ class StatisticsModel(SQLModel, table=True):
     data: Statistics = Field(sa_column=Column(PydanticJSON(Statistics)))
 
     version: int = Field(default=1)
-    created_at: dt = Field(default_factory=dt.now, nullable=False)
+    created_at: dt = Field(default_factory=_now, nullable=False)
     updated_at: dt = Field(
-        default_factory=dt.now, nullable=False, sa_column_kwargs={"onupdate": dt.now}
+        default_factory=_now, nullable=False, sa_column_kwargs={"onupdate": dt.now}
     )
 
 
@@ -127,9 +141,9 @@ class PVPCModel(SQLModel, table=True):
     data: EnergyPrice = Field(sa_column=Column(PydanticJSON(EnergyPrice)))
 
     version: int = Field(default=1)
-    created_at: dt = Field(default_factory=dt.now, nullable=False)
+    created_at: dt = Field(default_factory=_now, nullable=False)
     updated_at: dt = Field(
-        default_factory=dt.now, nullable=False, sa_column_kwargs={"onupdate": dt.now}
+        default_factory=_now, nullable=False, sa_column_kwargs={"onupdate": dt.now}
     )
 
 
@@ -156,7 +170,7 @@ class BillModel(SQLModel, table=True):
     data: Bill = Field(sa_column=Column(PydanticJSON(Bill)))
 
     version: int = Field(default=1)
-    created_at: dt = Field(default_factory=dt.now, nullable=False)
+    created_at: dt = Field(default_factory=_now, nullable=False)
     updated_at: dt = Field(
-        default_factory=dt.now, nullable=False, sa_column_kwargs={"onupdate": dt.now}
+        default_factory=_now, nullable=False, sa_column_kwargs={"onupdate": dt.now}
     )

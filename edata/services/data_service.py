@@ -164,6 +164,7 @@ class DataService:
             supply.date_end,
         )
 
+        explicit_start = start_date is not None
         if not start_date:
             start_date = supply.date_start
             _LOGGER.debug(
@@ -218,8 +219,12 @@ class DataService:
             # we have no data yet, fetch from start
             await self.update_energy(start_date, end_date)
 
-        # update power records
-        await self.update_power(start_date, end_date)
+        # update power records; unless a start is forced, only refetch from the
+        # month of the latest stored peak instead of the whole supply history
+        power_start = start_date
+        if not explicit_start and (last_power_dt := await self._get_last_power_dt()):
+            power_start = max(start_date, get_month(last_power_dt))
+        await self.update_power(power_start, end_date)
 
         # fetch pvpc data
         await self.update_pvpc(start_date, end_date)
@@ -488,6 +493,13 @@ class DataService:
         """Return the timestamp of the latest energy record."""
 
         last_record = await self.db.get_last_energy(self._cups)
+        if last_record:
+            return last_record.datetime
+
+    async def _get_last_power_dt(self) -> datetime | None:
+        """Return the timestamp of the latest power record."""
+
+        last_record = await self.db.get_last_power(self._cups)
         if last_record:
             return last_record.datetime
 

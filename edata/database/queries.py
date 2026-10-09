@@ -118,6 +118,18 @@ def list_power(
     return query
 
 
+def get_last_power(
+    cups: str,
+) -> SelectOfScalar[PowerModel]:
+    """Query that selects the most recent power record."""
+
+    query = select(PowerModel).where(PowerModel.cups == cups)
+    query = query.order_by(desc(PowerModel.datetime))
+    query = query.limit(1)
+
+    return query
+
+
 # Queries for "statistics" table
 def get_statistics(
     cups: str, type_: typing.Literal["day", "month"], datetime_: datetime | None = None

@@ -47,6 +47,18 @@ def _set_sqlite_pragmas(dbapi_connection, connection_record) -> None:
         cursor.close()
 
 
+def _create_missing_indexes(connection) -> None:
+    """Create indexes added after a table was first created.
+
+    ``create_all`` skips tables that already exist, indexes included, so
+    databases created by an older version would never get new indexes.
+    """
+
+    for table in SQLModel.metadata.sorted_tables:
+        for index in table.indexes:
+            index.create(connection, checkfirst=True)
+
+
 class EdataDB:
 
     _instance = None
@@ -82,6 +94,7 @@ class EdataDB:
         if self.engine:
             async with self.engine.begin() as conn:
                 await conn.run_sync(SQLModel.metadata.create_all)
+                await conn.run_sync(_create_missing_indexes)
             self._tables_initialized = True
 
     async def _add_one(
@@ -210,6 +223,14 @@ class EdataDB:
         await self._ensure_tables()
         async with AsyncSession(self.engine) as session:
             result = await session.exec(q.get_last_energy(cups))
+            return result.first()
+
+    async def get_last_power(self, cups: str) -> PowerModel | None:
+        """Get the most recent power record by cups."""
+
+        await self._ensure_tables()
+        async with AsyncSession(self.engine) as session:
+            result = await session.exec(q.get_last_power(cups))
             return result.first()
 
     async def get_last_pvpc(self) -> PVPCModel | None:
