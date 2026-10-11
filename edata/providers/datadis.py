@@ -371,6 +371,45 @@ class DatadisConnector:
                 return {}
         return response
 
+    async def _async_get_monthly_range(
+        self,
+        url: str,
+        request_data: dict[str, typing.Any],
+        start_date: datetime,
+        end_date: datetime,
+        key: str,
+    ) -> list[dict[str, typing.Any]]:
+        """Return the ``key`` rows of a monthly range query.
+
+        Some distributors fail (500) any query that includes the first month of
+        a contract, which would lose the whole range. If a multi-month query
+        brings nothing, ask month by month (newest first) so a broken month only
+        loses itself. Rows are returned in chronological order.
+
+        ``request_data`` already carries ``startDate``/``endDate`` in place, so
+        the cache key of the range query is unchanged.
+        """
+
+        first = start_date.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        last = end_date.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        data = dict(request_data)
+        rows = (await self._async_get(url, request_data=data)).get(key, [])
+        if rows or first == last:
+            return rows
+
+        _LOGGER.info("No data for %s to %s, retrying month by month", first, last)
+        months = []
+        month = last
+        while month >= first:
+            months.append(month)
+            month -= relativedelta(months=1)
+
+        chunks = []
+        for month in months:
+            data["startDate"] = data["endDate"] = datetime.strftime(month, "%Y/%m")
+            chunks.append((await self._async_get(url, request_data=data)).get(key, []))
+        return [row for chunk in reversed(chunks) for row in chunk]
+
     async def async_get_supplies(
         self, authorized_nif: str | None = None
     ) -> list[Supply]:
@@ -494,12 +533,14 @@ class DatadisConnector:
         if authorized_nif is not None:
             data["authorizedNif"] = authorized_nif
 
-        response = await self._async_get(URL_GET_CONSUMPTION_DATA, request_data=data)
+        rows = await self._async_get_monthly_range(
+            URL_GET_CONSUMPTION_DATA, data, start_date, end_date, "timeCurve"
+        )
 
         # building tens of thousands of records on a first import takes long
         # enough to stall the event loop, so parse in a worker thread
         return await asyncio.to_thread(
-            _parse_consumptions, response, start_date, end_date
+            _parse_consumptions, {"timeCurve": rows}, start_date, end_date
         )
 
     def get_consumption_data(
@@ -546,9 +587,11 @@ class DatadisConnector:
         }
         if authorized_nif is not None:
             data["authorizedNif"] = authorized_nif
-        response = await self._async_get(URL_GET_MAX_POWER, request_data=data)
+        rows = await self._async_get_monthly_range(
+            URL_GET_MAX_POWER, data, start_date, end_date, "maxPower"
+        )
         maxpower_values = []
-        for i in response.get("maxPower", []):
+        for i in rows:
             if all(k in i for k in GET_MAX_POWER_MANDATORY_FIELDS):
                 maxpower_values.append(
                     Power(
@@ -561,7 +604,7 @@ class DatadisConnector:
             else:
                 _LOGGER.warning(
                     "Weird data structure while fetching maximeter data, got %s",
-                    response,
+                    i,
                 )
         return maxpower_values
 
