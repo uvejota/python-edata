@@ -2,6 +2,7 @@
 
 import asyncio
 import contextlib
+import enum
 import hashlib
 import json
 import logging
@@ -22,6 +23,27 @@ _LOGGER = logging.getLogger(__name__)
 URL_TOKEN = "https://datadis.es/nikola-auth/tokens/login"
 TOKEN_USERNAME = "username"
 TOKEN_PASSWD = "password"
+
+
+
+class LoginStatus(enum.StrEnum):
+    """Outcome of the last attempt to log in to Datadis."""
+
+    OK = "ok"
+    REJECTED = "rejected"  # Datadis refused the username/password
+    UNAVAILABLE = "unavailable"  # no answer, or an error that says nothing about them
+
+
+def _login_rejected(status: int, text: str) -> bool:
+    """Return whether a failed login response means wrong credentials.
+
+    Datadis answers wrong credentials with a 500 whose message is "Bad
+    credentials" (checked 2026-10); 401/403 are taken the same way in case it
+    switches to the standard codes. Any other failure says nothing about them.
+    """
+
+    return status in (401, 403) or "bad credentials" in text.lower()
+
 
 # Supplies-related constants
 URL_GET_SUPPLIES = "https://datadis.es/api-private/api/get-supplies-v2"
@@ -160,6 +182,8 @@ class DatadisConnector:
         self._usr = username
         self._pwd = password
         self._token = {}
+        # outcome of the last login attempt, None until one is made
+        self.login_status: LoginStatus | None = None
         self._smart_fetch = enable_smart_fetch
         self._recent_queries = {}
         self._recent_cache = {}
@@ -231,11 +255,19 @@ class DatadisConnector:
                             "Authorization": "Bearer " + self._token["encoded"]
                         }
                         is_valid_token = True
+                        self.login_status = LoginStatus.OK
+                    elif _login_rejected(response.status, text):
+                        self.login_status = LoginStatus.REJECTED
+                        _LOGGER.error(
+                            "Datadis rejected the username or password, got %s", text
+                        )
                     else:
+                        self.login_status = LoginStatus.UNAVAILABLE
                         _LOGGER.error(
                             "Unknown error while retrieving token, got %s", text
                         )
             except Exception as e:
+                self.login_status = LoginStatus.UNAVAILABLE
                 _LOGGER.error("Exception while retrieving token: %s", e)
         return is_valid_token
 
