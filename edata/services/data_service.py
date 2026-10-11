@@ -23,7 +23,7 @@ from edata.database.controller import EdataDB
 from edata.database.migrations import MigrationResult, run_migrations
 from edata.models import Contract, Energy, Power, Statistics, Supply
 from edata.models.bill import EnergyPrice
-from edata.providers import DatadisConnector, REDataConnector
+from edata.providers import DatadisConnector, LoginStatus, REDataConnector
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -238,6 +238,16 @@ class DataService:
         """Test login at Datadis."""
 
         return await self.datadis.async_login()
+
+    @property
+    def login_status(self) -> LoginStatus | None:
+        """Outcome of the last Datadis login (None until one is made).
+
+        Lets a failed ``update`` tell rejected credentials apart from Datadis
+        being unavailable.
+        """
+
+        return self.datadis.login_status
 
     async def update_supplies(self) -> None:
         """Update the list of supplies for the configured user."""

@@ -5,9 +5,10 @@ import json
 import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import aiohttp
 import pytest
 
-from edata.providers.datadis import DatadisConnector, earliest_query_start
+from edata.providers.datadis import DatadisConnector, LoginStatus, earliest_query_start
 
 
 @pytest.fixture(autouse=True)
@@ -642,3 +643,63 @@ def test_failing_single_month_is_not_retried_by_month(mock_token, tmp_path):
 
     assert energy == []
     assert calls == [("2022/01", "2022/01"), ("2022/01", "2022/01")]
+
+
+@pytest.mark.parametrize(
+    ("status", "body", "expected"),
+    [
+        (200, "token", LoginStatus.OK),
+        # what Datadis answers to wrong credentials (checked 2026-10)
+        (
+            500,
+            '{"status": 500, "error": "Internal Server Error", "message": "Bad credentials"}',
+            LoginStatus.REJECTED,
+        ),
+        (401, "", LoginStatus.REJECTED),
+        (403, "Forbidden", LoginStatus.REJECTED),
+        (500, '{"status": 500, "message": "Server got itself in trouble"}', LoginStatus.UNAVAILABLE),
+        (503, "Service Unavailable", LoginStatus.UNAVAILABLE),
+    ],
+)
+def test_login_status(status, body, expected, tmp_path):
+    """A login tells rejected credentials apart from Datadis failing."""
+    reply = MagicMock()
+    reply.status = status
+    reply.text = AsyncMock(return_value=body)
+    connector = DatadisConnector(MOCK_USERNAME, MOCK_PASSWORD, storage_path=str(tmp_path))
+    assert connector.login_status is None
+
+    with patch("aiohttp.ClientSession.post") as post:
+        post.return_value.__aenter__.return_value = reply
+        assert connector.login() is (expected is LoginStatus.OK)
+
+    assert connector.login_status is expected
+
+
+def test_login_status_on_connection_error(tmp_path):
+    """No answer at all is not taken as rejected credentials."""
+    connector = DatadisConnector(MOCK_USERNAME, MOCK_PASSWORD, storage_path=str(tmp_path))
+
+    with patch("aiohttp.ClientSession.post", side_effect=aiohttp.ClientConnectionError):
+        assert connector.login() is False
+
+    assert connector.login_status is LoginStatus.UNAVAILABLE
+
+
+@patch("aiohttp.ClientSession.get")
+def test_login_status_after_a_rejected_refresh(mock_get, tmp_path):
+    """A query whose token refresh is rejected leaves the status as rejected."""
+    expired = MagicMock()
+    expired.status = 401
+    expired.text = AsyncMock(return_value="")
+    mock_get.return_value.__aenter__.return_value = expired
+    rejected = MagicMock()
+    rejected.status = 500
+    rejected.text = AsyncMock(return_value='{"message": "Bad credentials"}')
+    connector = DatadisConnector(MOCK_USERNAME, MOCK_PASSWORD, storage_path=str(tmp_path))
+
+    with patch("aiohttp.ClientSession.post") as post:
+        post.return_value.__aenter__.return_value = rejected
+        assert connector.get_supplies() == []
+
+    assert connector.login_status is LoginStatus.REJECTED
