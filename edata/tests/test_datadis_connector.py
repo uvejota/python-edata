@@ -477,3 +477,168 @@ def test_queries_entirely_before_history_are_skipped(mock_token, mock_get, tmp_p
         )
 
     mock_get.assert_not_called()
+
+
+def _first_month_broken_get(bad_month: str, calls: list[tuple[str, str]]):
+    """Fake Datadis that fails (500) any query including ``bad_month``.
+
+    Healthy months answer one consumption and one max power row per day 1..3,
+    so the merged result can be checked for order and gaps.
+    """
+
+    def fake_get(url, **kwargs):
+        query = dict(p.split("=") for p in url.split("?")[1].strip("&").split("&"))
+        start, end = query["startDate"], query["endDate"]
+        calls.append((start, end))
+        reply = MagicMock()
+        reply.text = AsyncMock(return_value="Internal Server Error")
+        if start <= bad_month <= end:
+            reply.status = 500
+        else:
+            reply.status = 200
+            days = []
+            month = datetime.datetime.strptime(start, "%Y/%m")
+            while month <= datetime.datetime.strptime(end, "%Y/%m"):
+                days += [month.replace(day=d).strftime("%Y/%m/%d") for d in (1, 2, 3)]
+                month = (month + datetime.timedelta(days=32)).replace(day=1)
+            reply.read = _json_body(
+                {
+                    "timeCurve": [
+                        {
+                            "cups": "ESXXXXXXXXXXXXXXXXTEST",
+                            "date": day,
+                            "time": "01:00",
+                            "consumptionKWh": 1.0,
+                            "obtainMethod": "Real",
+                            "surplusEnergyKWh": 0,
+                        }
+                        for day in days
+                    ],
+                    "maxPower": [
+                        {
+                            "cups": "ESXXXXXXXXXXXXXXXXTEST",
+                            "date": day,
+                            "time": "12:00",
+                            "maxPower": 2.5,
+                            "period": "VALLE",
+                        }
+                        for day in days
+                    ],
+                }
+            )
+        context = MagicMock()
+        context.__aenter__ = AsyncMock(return_value=reply)
+        context.__aexit__ = AsyncMock(return_value=False)
+        return context
+
+    return fake_get
+
+
+@patch.object(
+    DatadisConnector, "_async_get_token", new_callable=AsyncMock, return_value=True
+)
+def test_failing_month_does_not_lose_the_range(mock_token, tmp_path):
+    """A month Datadis cannot serve only loses itself; rows stay sorted."""
+    calls: list[tuple[str, str]] = []
+    connector = DatadisConnector(
+        MOCK_USERNAME, MOCK_PASSWORD, storage_path=str(tmp_path)
+    )
+    start = datetime.datetime(2022, 1, 15)
+    end = datetime.datetime(2022, 4, 30)
+
+    with patch(
+        "aiohttp.ClientSession.get",
+        side_effect=_first_month_broken_get("2022/01", calls),
+    ):
+        energy = connector.get_consumption_data(
+            "ESXXXXXXXXXXXXXXXXTEST", "2", start, end, "0", 5
+        )
+    # range query and its retry, then month by month from the newest
+    assert calls == [
+        ("2022/01", "2022/04"),
+        ("2022/01", "2022/04"),
+        ("2022/04", "2022/04"),
+        ("2022/03", "2022/03"),
+        ("2022/02", "2022/02"),
+        ("2022/01", "2022/01"),
+        ("2022/01", "2022/01"),
+    ]
+    expected = [
+        datetime.datetime(2022, month, day) for month in (2, 3, 4) for day in (1, 2, 3)
+    ]
+    assert [x.datetime for x in energy] == expected
+
+    calls.clear()
+    with patch(
+        "aiohttp.ClientSession.get",
+        side_effect=_first_month_broken_get("2022/01", calls),
+    ):
+        power = connector.get_max_power("ESXXXXXXXXXXXXXXXXTEST", "2", start, end)
+    assert [x.datetime for x in power] == [x.replace(hour=12) for x in expected]
+
+    # a second run the same day is answered from the cache, still sorted
+    calls.clear()
+    with patch(
+        "aiohttp.ClientSession.get",
+        side_effect=_first_month_broken_get("2022/01", calls),
+    ):
+        energy = connector.get_consumption_data(
+            "ESXXXXXXXXXXXXXXXXTEST", "2", start, end, "0", 5
+        )
+    assert calls == []
+    assert [x.datetime for x in energy] == expected
+
+
+@patch.object(
+    DatadisConnector, "_async_get_token", new_callable=AsyncMock, return_value=True
+)
+def test_healthy_range_is_a_single_query(mock_token, tmp_path):
+    """Without failures the whole range is still fetched in one request."""
+    calls: list[tuple[str, str]] = []
+    connector = DatadisConnector(
+        MOCK_USERNAME, MOCK_PASSWORD, storage_path=str(tmp_path)
+    )
+
+    with patch(
+        "aiohttp.ClientSession.get",
+        side_effect=_first_month_broken_get("2021/12", calls),
+    ):
+        energy = connector.get_consumption_data(
+            "ESXXXXXXXXXXXXXXXXTEST",
+            "2",
+            datetime.datetime(2022, 1, 1),
+            datetime.datetime(2022, 4, 30),
+            "0",
+            5,
+        )
+
+    assert calls == [("2022/01", "2022/04")]
+    assert len(energy) == 12
+    assert [x.datetime for x in energy] == sorted(x.datetime for x in energy)
+
+
+@patch.object(
+    DatadisConnector, "_async_get_token", new_callable=AsyncMock, return_value=True
+)
+def test_failing_single_month_is_not_retried_by_month(mock_token, tmp_path):
+    """A single-month query has nothing to split."""
+    calls: list[tuple[str, str]] = []
+    connector = DatadisConnector(
+        MOCK_USERNAME, MOCK_PASSWORD, storage_path=str(tmp_path)
+    )
+
+    with patch(
+        "aiohttp.ClientSession.get",
+        side_effect=_first_month_broken_get("2022/01", calls),
+    ):
+        energy = connector.get_consumption_data(
+            "ESXXXXXXXXXXXXXXXXTEST",
+            "2",
+            datetime.datetime(2022, 1, 15),
+            datetime.datetime(2022, 1, 31),
+            "0",
+            5,
+        )
+
+    assert energy == []
+    assert calls == [("2022/01", "2022/01"), ("2022/01", "2022/01")]
