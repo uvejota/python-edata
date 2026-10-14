@@ -59,12 +59,19 @@ def get_tariff(dt: datetime) -> int:
 
 
 def get_contract_for_dt(contracts: list[Contract], date: datetime) -> Contract | None:
-    """Return the active contract for a provided datetime."""
+    """Return the active contract for a provided datetime.
 
-    for contract in contracts:
-        if contract.date_start <= date <= contract.date_end:
-            return contract
-    return None
+    Datadis may report contracts that overlap, such as one with no start date
+    (stored as starting in 1970) and no contracted power that spans the real
+    ones. The latest-starting contract with a contracted power wins; one
+    without power is only returned when no other covers the datetime.
+    """
+
+    covering = [c for c in contracts if c.date_start <= date <= c.date_end]
+    if not covering:
+        return None
+    with_power = [c for c in covering if any(p > 0 for p in c.power)]
+    return max(with_power or covering, key=lambda c: c.date_start)
 
 
 def get_month(dt: datetime) -> datetime:

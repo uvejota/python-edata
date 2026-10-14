@@ -191,6 +191,69 @@ async def test_simulate_does_not_persist(
 
 
 @pytest.mark.asyncio
+async def test_bills_skip_placeholder_contract_without_power(storage_dir):
+    """A 1970 contract without power does not hide the real one (issue #352)."""
+    cups = "ESXXXXXXXXXXXXXXXXZERO"
+    bs = BillService(cups, storage_path=storage_dir)
+    await bs.db.add_supply(
+        Supply(
+            cups=cups,
+            date_start=datetime(1970, 1, 1),
+            date_end=datetime(2027, 1, 1),
+            address=None,
+            postal_code=None,
+            province=None,
+            municipality=None,
+            distributor=None,
+            point_type=5,
+            distributor_code="2",
+        )
+    )
+    for contract in (
+        Contract(
+            date_start=datetime(1970, 1, 1),
+            date_end=datetime(2026, 9, 19),
+            marketer="",
+            distributor_code="2",
+            power=[0.0],
+        ),
+        Contract(
+            date_start=datetime(2025, 1, 1),
+            date_end=datetime(2027, 1, 1),
+            marketer="MARKETER",
+            distributor_code="2",
+            power=[4.6, 4.6],
+        ),
+    ):
+        await bs.db.add_contract(cups, contract)
+    start = datetime(2026, 9, 1)
+    await bs.db.add_energy_list(
+        cups,
+        [
+            Energy(
+                datetime=start + timedelta(hours=h),
+                delta_h=1,
+                consumption_kwh=0.5,
+                real=True,
+            )
+            for h in range(30 * 24)
+        ],
+    )
+
+    rules = BillingRules(
+        p1_kwh_eur=0.20,
+        p2_kwh_eur=0.20,
+        p3_kwh_eur=0.20,
+        p1_kw_year_eur=20,
+        p2_kw_year_eur=10,
+    )
+    bills = await bs.simulate(billing_rules=rules, is_pvpc=False)
+    # the whole month is billed, not only from 2026-09-19 on
+    assert len(bills) == 30 * 24
+    assert bills[0].datetime == start
+
+
+@pytest.mark.asyncio
 async def test_clear_bills(populated_data_service, energy, storage_dir):
     bs = BillService("ESXXXXXXXXXXXXXXXXTEST", storage_path=storage_dir)
 
