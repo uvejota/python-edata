@@ -4,7 +4,8 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from edata.core.utils import get_month, iter_month_windows
+from edata.core.utils import get_contract_for_dt, get_month, iter_month_windows
+from edata.models.supply import Contract
 
 
 def _assert_windows_valid(
@@ -58,3 +59,40 @@ def test_iter_month_windows_single_instant() -> None:
 def test_iter_month_windows_empty_when_end_before_start() -> None:
     """An inverted range yields no windows."""
     assert list(iter_month_windows(datetime(2023, 2, 1), datetime(2023, 1, 1))) == []
+
+
+def _contract(start: datetime, end: datetime, power: list[float]) -> Contract:
+    return Contract(
+        date_start=start,
+        date_end=end,
+        marketer="",
+        distributor_code="2",
+        power=power,
+    )
+
+
+# as i-DE reports it: no start date (stored as 1970) and no power
+PLACEHOLDER = _contract(datetime(1970, 1, 1), datetime(2026, 9, 19), [0.0])
+OLD = _contract(datetime(2024, 1, 1), datetime(2025, 6, 1), [3.3, 3.3])
+CURRENT = _contract(datetime(2025, 6, 1), datetime(2027, 1, 1), [4.6, 4.6])
+
+
+@pytest.mark.parametrize(
+    ("date", "expected"),
+    [
+        # the placeholder overlaps the real contracts: they win
+        (datetime(2024, 3, 1), OLD),
+        (datetime(2026, 9, 1), CURRENT),
+        # on the day one contract ends and the next starts, the newest one
+        (datetime(2025, 6, 1), CURRENT),
+        # covered only by the placeholder: kept, as it is what Datadis reports
+        (datetime(2023, 1, 1), PLACEHOLDER),
+        # not covered at all
+        (datetime(2028, 1, 1), None),
+    ],
+)
+def test_get_contract_for_dt_prefers_contracts_with_power(
+    date: datetime, expected: Contract | None
+) -> None:
+    """The real contract is picked over an overlapping one without power."""
+    assert get_contract_for_dt([PLACEHOLDER, OLD, CURRENT], date) == expected
