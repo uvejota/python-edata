@@ -127,13 +127,14 @@ async def apply(db: EdataDB, storage_dir: str, cups: str) -> MigrationResult | N
     _LOGGER.info("Migrating legacy 1.3.3 storage from %s", path)
     result = MigrationResult(name=NAME)
 
-    for supply in records.supplies:
-        await db.add_supply(supply)
-    result.supplies = len(records.supplies)
-
-    # Contracts/energy/power reference a supply by cups; take it from the imported
+    # 1.x stored every supply of the account in each file, but the rest of the
+    # records belong to the one the file is named after. Take its cups from the
     # supply record rather than the (lower-cased) filename id.
-    target_cups = records.supplies[0].cups if records.supplies else cups
+    supply = next((x for x in records.supplies if x.cups.upper() == cups.upper()), None)
+    if supply is not None:
+        await db.add_supply(supply)
+        result.supplies = 1
+    target_cups = supply.cups if supply is not None else cups
 
     for contract in records.contracts:
         await db.add_contract(target_cups, contract)

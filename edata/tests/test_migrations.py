@@ -139,6 +139,32 @@ async def test_apply_is_idempotent(data_service: DataService, tmp_path) -> None:
     assert len(await data_service.get_pvpc()) == 2
 
 
+@pytest.mark.asyncio
+async def test_apply_imports_into_the_file_supply(
+    data_service: DataService, tmp_path
+) -> None:
+    """With several supplies in the account, records go to the file's own one."""
+    other = "ESYYYYYYYYYYYYYYYYOTHR"
+    raw = _raw()
+    # 1.x listed every supply of the account, not necessarily the file's first
+    raw["supplies"] = [{**raw["supplies"][0], "cups": other}, *raw["supplies"]]
+    dest = legacy._legacy_path(str(tmp_path), CUPS)
+    os.makedirs(os.path.dirname(dest), exist_ok=True)
+    with open(dest, "w", encoding="utf-8") as f:
+        json.dump(raw, f)
+
+    result = await legacy.apply(data_service.db, str(tmp_path), CUPS)
+
+    assert result is not None and result.supplies == 1
+    supply = await data_service.get_supply()
+    assert supply is not None and supply.cups == CUPS
+    assert len(await data_service.get_energy()) == 5
+    assert len(await data_service.get_contracts()) == 2
+    # nothing lands on the other supply
+    assert await data_service.db.get_supply(other) is None
+    assert await data_service.db.list_energy(other) == []
+
+
 # --- orchestrator (DataService.run_migrations) ---
 
 
