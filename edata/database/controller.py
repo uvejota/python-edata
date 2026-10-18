@@ -296,6 +296,46 @@ class EdataDB:
             return result.first()
 
     @_in_db_thread
+    def get_first_energy(self, cups: str) -> EnergyModel | None:
+        """Get the oldest Energy record by cups."""
+
+        self._ensure_tables()
+        with Session(self.engine) as session:
+            result = session.exec(q.get_first_energy(cups))
+            return result.first()
+
+    @_in_db_thread
+    def get_first_power(self, cups: str) -> PowerModel | None:
+        """Get the oldest power record by cups."""
+
+        self._ensure_tables()
+        with Session(self.engine) as session:
+            result = session.exec(q.get_first_power(cups))
+            return result.first()
+
+    @_in_db_thread
+    def get_first_statistic(
+        self, cups: str, type_: typing.Literal["day", "month"]
+    ) -> StatisticsModel | None:
+        """Get the oldest statistics record by cups and type."""
+
+        self._ensure_tables()
+        with Session(self.engine) as session:
+            result = session.exec(q.get_first_statistic(cups, type_))
+            return result.first()
+
+    @_in_db_thread
+    def get_first_bill(
+        self, cups: str, type_: typing.Literal["hour", "day", "month"]
+    ) -> BillModel | None:
+        """Get the oldest bill record by cups and type."""
+
+        self._ensure_tables()
+        with Session(self.engine) as session:
+            result = session.exec(q.get_first_bill(cups, type_))
+            return result.first()
+
+    @_in_db_thread
     def get_last_energy(self, cups: str) -> EnergyModel | None:
         """Get the most recent Energy record by cups."""
 

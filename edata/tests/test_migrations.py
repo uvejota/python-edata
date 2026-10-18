@@ -32,6 +32,12 @@ def _install_legacy_file(storage_dir: str, cups: str = CUPS) -> str:
     return dest
 
 
+def _write_legacy_file(dest: str, raw: dict) -> None:
+    """Overwrite an installed legacy file with ``raw``."""
+    with open(dest, "w", encoding="utf-8") as f:
+        json.dump(raw, f)
+
+
 @pytest_asyncio.fixture
 async def data_service(tmp_path) -> AsyncIterator[DataService]:
     """A DataService on an isolated on-disk database, singleton reset around it."""
@@ -181,6 +187,25 @@ async def test_run_migrations_compiles_statistics(
     assert len(await data_service.get_energy()) == 5
     assert len(await data_service.get_statistics("day")) > 0
     assert len(await data_service.get_statistics("month")) > 0
+
+
+@pytest.mark.asyncio
+async def test_run_migrations_compiles_from_the_first_energy(
+    data_service: DataService, tmp_path
+) -> None:
+    """Records older than the supply's start get statistics too (issue #361).
+
+    1.x kept Datadis's supply start, which moves to the latest contract (e.g.
+    after switching marketers), while keeping the older records.
+    """
+    raw = _raw()
+    raw["supplies"][0]["date_start"] = "2024-06-01T00:00:00"
+    _write_legacy_file(_install_legacy_file(str(tmp_path)), raw)
+
+    await data_service.run_migrations(compile_statistics=True)
+
+    daily = await data_service.get_statistics("day")
+    assert [x.datetime for x in daily] == [datetime(2024, 1, 1)]
 
 
 @pytest.mark.asyncio

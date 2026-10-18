@@ -46,6 +46,13 @@ class BillService:
 
         return await self.db.list_bill_data(self._cups, type_, start, end)
 
+    async def get_first_bill_dt(self) -> datetime | None:
+        """Return the timestamp of the oldest hourly bill."""
+
+        first_record = await self.db.get_first_bill(self._cups, "hour")
+        if first_record:
+            return first_record.datetime
+
     async def update(
         self,
         start: datetime | None = None,
@@ -85,11 +92,14 @@ class BillService:
             start = await self._get_last_bill_dt()
 
         if not start:
+            # from the oldest energy record: the supply's start may be later
+            # (e.g. after switching marketers)
             _LOGGER.debug(
-                "%s there are no bills for this cups, building since the start of the supply",
+                "%s there are no bills for this cups, building since the first energy record",
                 self._scups,
             )
-            start = supply.data.date_start
+            first_energy = await self.db.get_first_energy(self._cups)
+            start = first_energy.datetime if first_energy else supply.data.date_start
 
         if not end:
             _LOGGER.debug(
@@ -217,10 +227,8 @@ class BillService:
         if last_complete:
             start = get_day(last_complete.datetime) + timedelta(days=1)
         else:
-            supply = await self.db.get_supply(self._cups)
-            start = get_day(
-                supply.data.date_start if supply else last_bill.datetime
-            )
+            first_bill = await self.db.get_first_bill(self._cups, "hour")
+            start = get_day(first_bill.datetime if first_bill else last_bill.datetime)
         ledger.mark_range(start, last_bill.datetime)
 
     async def _compile_pending(self, ledger: PendingLedger) -> None:

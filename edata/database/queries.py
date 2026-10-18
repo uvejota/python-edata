@@ -80,6 +80,18 @@ def list_energy(
     return query
 
 
+def get_first_energy(
+    cups: str,
+) -> SelectOfScalar[EnergyModel]:
+    """Query that selects the oldest Energy record."""
+
+    query = select(EnergyModel).where(EnergyModel.cups == cups)
+    query = query.order_by(asc(EnergyModel.datetime))
+    query = query.limit(1)
+
+    return query
+
+
 def get_last_energy(
     cups: str,
 ) -> SelectOfScalar[EnergyModel]:
@@ -115,6 +127,18 @@ def list_power(
     if date_to:
         query = query.where(PowerModel.datetime <= date_to)
     query = query.order_by(asc(PowerModel.datetime))
+    return query
+
+
+def get_first_power(
+    cups: str,
+) -> SelectOfScalar[PowerModel]:
+    """Query that selects the oldest power record."""
+
+    query = select(PowerModel).where(PowerModel.cups == cups)
+    query = query.order_by(asc(PowerModel.datetime))
+    query = query.limit(1)
+
     return query
 
 
@@ -164,6 +188,18 @@ def list_statistics(
     return query
 
 
+def get_first_statistic(
+    cups: str, type_: typing.Literal["day", "month"]
+) -> SelectOfScalar[StatisticsModel]:
+    """Query that selects the oldest statistics record."""
+
+    query = select(StatisticsModel).where(StatisticsModel.cups == cups)
+    query = query.where(StatisticsModel.type == type_)
+    query = query.order_by(asc(StatisticsModel.datetime))
+    query = query.limit(1)
+    return query
+
+
 def get_last_complete_statistic(
     cups: str, type_: typing.Literal["day", "month"]
 ) -> SelectOfScalar[StatisticsModel]:
@@ -195,6 +231,19 @@ def list_bill(
     if complete is not None:
         query = query.where(BillModel.complete == complete)
     query = query.order_by(asc(BillModel.datetime))
+    return query
+
+
+def get_first_bill(
+    cups: str, type_: typing.Literal["hour", "day", "month"]
+) -> SelectOfScalar[BillModel]:
+    """Query that selects the oldest bill record."""
+
+    query = select(BillModel).where(BillModel.cups == cups)
+    query = query.where(BillModel.type == type_)
+    query = query.order_by(asc(BillModel.datetime))
+    query = query.limit(1)
+
     return query
 
 
