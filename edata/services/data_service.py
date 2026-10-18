@@ -24,6 +24,7 @@ from edata.database.migrations import MigrationResult, run_migrations
 from edata.models import Contract, Energy, Power, Statistics, Supply
 from edata.models.bill import EnergyPrice
 from edata.providers import DatadisConnector, LoginStatus, REDataConnector
+from edata.providers.datadis import earliest_query_start
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -122,6 +123,43 @@ class DataService:
 
         return await self._get_last_energy_dt()
 
+    async def get_first_energy_dt(self) -> datetime | None:
+        """Return the timestamp of the oldest energy record."""
+
+        first_record = await self.db.get_first_energy(self._cups)
+        if first_record:
+            return first_record.datetime
+
+    async def get_first_power_dt(self) -> datetime | None:
+        """Return the timestamp of the oldest power record."""
+
+        first_record = await self.db.get_first_power(self._cups)
+        if first_record:
+            return first_record.datetime
+
+    async def get_history_start(self) -> datetime | None:
+        """Return the oldest date Datadis serves for the supply.
+
+        That is the oldest start of the supply and its contracts (see
+        ``_get_oldest_start``), within the two years Datadis serves. ``None``
+        if the supply is unknown.
+        """
+
+        supply = await self.get_supply()
+        if supply is None:
+            return None
+        return max(await self._get_oldest_start(supply), earliest_query_start())
+
+    async def _get_oldest_start(self, supply: Supply) -> datetime:
+        """Return the oldest start of the supply and its stored contracts.
+
+        Datadis moves the supply's start to the latest contract (e.g. after
+        switching marketers), but still serves the earlier ones.
+        """
+
+        contracts = await self.get_contracts()
+        return min([supply.date_start, *(c.date_start for c in contracts)])
+
     async def update(
         self,
         start_date: datetime | None = None,
@@ -164,11 +202,20 @@ class DataService:
             supply.date_end,
         )
 
+        # update contracts to get valid periods
+        await self.update_contracts()
+        if not self._contracts:
+            _LOGGER.warning(
+                "%s unable to update contracts, edata will assume that the selected supply has no contractual issues",
+                scups,
+            )
+
         explicit_start = start_date is not None
         if not start_date:
-            start_date = supply.date_start
+            start_date = await self._get_oldest_start(supply)
             _LOGGER.debug(
-                "%s automatically setting start date as supply date start", self._scups
+                "%s automatically setting start date as the oldest contract start",
+                self._scups,
             )
         if not end_date:
             end_date = datetime.today()
@@ -180,14 +227,6 @@ class DataService:
             start_date,
             end_date,
         )
-
-        # update contracts to get valid periods
-        await self.update_contracts()
-        if not self._contracts:
-            _LOGGER.warning(
-                "%s unable to update contracts, edata will assume that the selected supply has no contractual issues",
-                scups,
-            )
 
         # update energy records
         last_energy_dt = await self._get_last_energy_dt()
@@ -349,10 +388,12 @@ class DataService:
         if not results or not compile_statistics:
             return results
 
-        supply = await self.get_supply()
+        # from the oldest record: the supply's start may be later (e.g. after
+        # switching marketers, 1.x already stored Datadis's new start)
+        first_energy_dt = await self.get_first_energy_dt()
         last_energy_dt = await self._get_last_energy_dt()
-        if supply is not None and last_energy_dt is not None:
-            await self.update_statistics(supply.date_start, last_energy_dt)
+        if first_energy_dt is not None and last_energy_dt is not None:
+            await self.update_statistics(first_energy_dt, last_energy_dt)
         return results
 
     async def update_statistics(self, start: datetime, end: datetime) -> None:
@@ -373,6 +414,7 @@ class DataService:
 
         ledger = PendingLedger()
         await self._seed_pending_backlog(ledger)
+        await self._seed_pending_history(ledger)
         await self._seed_pending_recent(ledger)
         await self._compile_pending(ledger)
 
@@ -381,6 +423,23 @@ class DataService:
 
         ledger.add_days(await self._find_missing_stats("day"))
         ledger.add_months(await self._find_missing_stats("month"))
+
+    async def _seed_pending_history(self, ledger: PendingLedger) -> None:
+        """Seed the ledger with the energy older than the first daily stat.
+
+        Statistics used to be compiled from the supply's start only, so energy
+        from before it (e.g. imported from 1.x after switching marketers) was
+        left out of them.
+        """
+
+        first_energy = await self.db.get_first_energy(self._cups)
+        first_stat = await self.db.get_first_statistic(self._cups, "day")
+        if not first_energy or not first_stat:
+            return
+        if get_day(first_energy.datetime) < first_stat.datetime:
+            ledger.mark_range(
+                first_energy.datetime, first_stat.datetime - timedelta(hours=1)
+            )
 
     async def _seed_pending_recent(self, ledger: PendingLedger) -> None:
         """Seed the ledger with the range past the last complete daily stat."""
@@ -393,9 +452,9 @@ class DataService:
         if last_complete:
             start = get_day(last_complete.datetime) + timedelta(days=1)
         else:
-            supply = await self.db.get_supply(self._cups)
+            first_energy = await self.db.get_first_energy(self._cups)
             start = get_day(
-                supply.data.date_start if supply else last_energy.datetime
+                first_energy.datetime if first_energy else last_energy.datetime
             )
         ledger.mark_range(start, last_energy.datetime)
 
