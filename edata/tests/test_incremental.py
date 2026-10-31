@@ -2,7 +2,7 @@
 
 from collections.abc import AsyncIterator
 from datetime import datetime, timedelta
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 import pytest_asyncio
@@ -209,3 +209,53 @@ async def test_history_start_takes_the_oldest_contract(
 @pytest.mark.asyncio
 async def test_history_start_unknown_supply(data_service: DataService) -> None:
     assert await data_service.get_history_start() is None
+
+
+@pytest.mark.asyncio
+async def test_first_import_asks_for_everything_datadis_serves(
+    data_service: DataService,
+) -> None:
+    """After switching marketers, Datadis may move the supply's start to the new
+    contract and list only that one, while it still serves the earlier
+    consumptions (issue #367): the first import asks from its oldest month."""
+    now = datetime.now().replace(minute=0, second=0, microsecond=0)
+    supply_start = get_day(now - timedelta(days=30))
+    supply = Supply(
+        cups=CUPS,
+        date_start=supply_start,
+        date_end=now + timedelta(days=1),
+        address=None,
+        postal_code=None,
+        province=None,
+        municipality=None,
+        distributor=None,
+        point_type=5,
+        distributor_code="2",
+    )
+    datadis = AsyncMock()
+    datadis.async_get_supplies.return_value = [supply]
+    datadis.async_get_contract_detail.return_value = [
+        _contract(supply_start, now + timedelta(days=1))
+    ]
+    datadis.async_get_consumption_data.return_value = _hourly_energy(
+        get_day(now - timedelta(days=200)), get_day(now)
+    )
+    datadis.async_get_max_power.return_value = []
+    data_service.datadis = datadis
+
+    with patch.object(data_service, "update_pvpc", AsyncMock(return_value=True)):
+        assert await data_service.update()
+        assert datadis.async_get_consumption_data.await_args.args[2] == (
+            earliest_query_start()
+        )
+        assert datadis.async_get_max_power.await_args.args[2] == (
+            earliest_query_start()
+        )
+
+        # with data stored, only what is newer than the last record
+        datadis.async_get_consumption_data.reset_mock()
+        assert await data_service.update()
+        starts = [
+            call.args[2] for call in datadis.async_get_consumption_data.await_args_list
+        ]
+        assert starts and min(starts) > supply_start

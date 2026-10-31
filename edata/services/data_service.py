@@ -210,8 +210,18 @@ class DataService:
                 scups,
             )
 
+        last_energy_dt = await self._get_last_energy_dt()
         explicit_start = start_date is not None
-        if not start_date:
+        if not start_date and last_energy_dt is None:
+            # first import: Datadis may move the supply's start to the latest
+            # contract (and list only that one) while it still serves the
+            # earlier consumptions, so ask for everything it serves
+            start_date = earliest_query_start()
+            _LOGGER.debug(
+                "%s first import, setting start date as the oldest Datadis serves",
+                self._scups,
+            )
+        elif not start_date:
             start_date = await self._get_oldest_start(supply)
             _LOGGER.debug(
                 "%s automatically setting start date as the oldest contract start",
@@ -229,7 +239,6 @@ class DataService:
         )
 
         # update energy records
-        last_energy_dt = await self._get_last_energy_dt()
         if last_energy_dt:
             _LOGGER.info(
                 "%s the latest known energy timestamp is %s",
