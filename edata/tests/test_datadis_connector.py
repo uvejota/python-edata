@@ -6,6 +6,7 @@ import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import aiohttp
+import diskcache_community
 import pytest
 
 from edata.providers.datadis import DatadisConnector, LoginStatus, earliest_query_start
@@ -334,6 +335,59 @@ def test_get_consumption_data_cache(mock_token, mock_get, snapshot):
         == snapshot
     )
     mock_get.assert_not_called()
+
+
+def _write_marker(path: str) -> dict:
+    with open(path, "w", encoding="utf-8") as marker:
+        marker.write("ran")
+    return {"timeCurve": []}
+
+
+class _PlantedEntry:
+    def __init__(self, path: str) -> None:
+        self.path = path
+
+    def __reduce__(self):
+        return (_write_marker, (self.path,))
+
+
+@patch("aiohttp.ClientSession.get")
+@patch.object(
+    DatadisConnector, "_async_get_token", new_callable=AsyncMock, return_value=True
+)
+def test_pickled_cache_entry_is_dropped_unread(mock_token, mock_get, tmp_path):
+    mock_response = MagicMock()
+    mock_response.status = 200
+    mock_response.text = AsyncMock(return_value="text")
+    mock_response.read = _json_body(CONSUMPTIONS_RESPONSE)
+    mock_get.return_value.__aenter__.return_value = mock_response
+    connector = DatadisConnector(
+        MOCK_USERNAME, MOCK_PASSWORD, storage_path=str(tmp_path)
+    )
+    query = (
+        "ESXXXXXXXXXXXXXXXXTEST",
+        "2",
+        datetime.datetime(2022, 10, 22, 0, 0, 0),
+        datetime.datetime(2022, 10, 22, 2, 0, 0),
+        "0",
+        5,
+    )
+    assert len(connector.get_consumption_data(*query)) == 2
+
+    marker = tmp_path / "marker"
+    with diskcache_community.Cache(
+        connector._recent_cache_dir, disk=diskcache_community.Disk
+    ) as other_writer:
+        (key,) = list(other_writer)
+        other_writer.set(key, _PlantedEntry(str(marker)))
+
+    mock_get.reset_mock()
+    assert connector.get_consumption_data(*query) == []
+    assert not marker.exists()
+    mock_get.assert_not_called()
+
+    assert len(connector.get_consumption_data(*query)) == 2
+    mock_get.assert_called_once()
 
 
 @patch("aiohttp.ClientSession.get")

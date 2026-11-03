@@ -12,7 +12,7 @@ import typing
 from datetime import datetime, timedelta
 
 import aiohttp
-import diskcache
+import diskcache_community
 from dateutil.relativedelta import relativedelta
 
 from edata.models import Contract, Energy, Power, Supply
@@ -196,7 +196,10 @@ class DatadisConnector:
                 tempfile.gettempdir(), RECENT_CACHE_SUBDIR
             )
         os.makedirs(self._recent_cache_dir, exist_ok=True)
-        self._cache = diskcache.Cache(self._recent_cache_dir)
+        self._cache = diskcache_community.Cache(
+            self._recent_cache_dir,
+            disk=diskcache_community.SafeDisk.with_options(on_error="miss"),
+        )
 
     @contextlib.asynccontextmanager
     async def _client(self) -> typing.AsyncIterator[aiohttp.ClientSession]:
